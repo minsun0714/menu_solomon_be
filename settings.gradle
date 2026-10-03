@@ -1,0 +1,3 @@
+rootProject.name = 'menu-solomon-be'
+include 'app'
+include 'mock-kakao'
