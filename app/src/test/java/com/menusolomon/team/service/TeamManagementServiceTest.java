@@ -1,5 +1,12 @@
 package com.menusolomon.team.service;
 
+import java.util.List;
+import com.menusolomon.team.repository.MyTeamRow;
+import com.menusolomon.team.repository.TeamMemberRow;
+import com.menusolomon.team.domain.TeamRole;
+import com.menusolomon.team.dto.TeamMemberResponse;
+import com.menusolomon.user.repository.UserRepository;
+
 import static com.menusolomon.team.fixture.TeamFixture.*;
 import static com.menusolomon.user.fixture.UserFixture.user;
 import static org.assertj.core.api.Assertions.*;
@@ -16,7 +23,6 @@ import com.menusolomon.team.dto.OfficeLocationRequest;
 import com.menusolomon.team.dto.TeamUpdateRequest;
 import com.menusolomon.team.repository.TeamMemberRepository;
 import com.menusolomon.team.repository.TeamRepository;
-import com.menusolomon.user.repository.UserRepository;
 import com.menusolomon.user.service.UserService;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -79,9 +85,10 @@ class TeamManagementServiceTest {
     }
 
     @Test
-    void getInvitation_member_throwsAdminRequired() {
+    void getInvitation_member_returnsInviteUrl() {
         current(member());
-        assertError(() -> service.getInvitation(1L, "token"), ErrorCode.ADMIN_REQUIRED);
+        when(teams.findById(1L)).thenReturn(Optional.of(team()));
+        assertThat(service.getInvitation(1L, "token").inviteUrl()).isEqualTo("https://frontend.example/invite/invite-token");
     }
 
     @Test
@@ -202,6 +209,119 @@ class TeamManagementServiceTest {
         current(inactive);
         assertError(() -> service.updateTeam(1L, "token", new TeamUpdateRequest("새 팀", "")), ErrorCode.NOT_TEAM_MEMBER);
         verifyNoInteractions(teams);
+    }
+
+    @Test
+    void getMyTeams_returnsProjectedActiveTeams() {
+        when(users.findBySessionToken("token")).thenReturn(Optional.of(user(10L, "hash", "익명")));
+        when(teams.findMyTeams(10L)).thenReturn(List.of(
+                new MyTeamRow(1L, "팀", "소개", TeamRole.ADMIN, 2L)));
+        var result = service.getMyTeams("token");
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().teamId()).isEqualTo("team_1");
+        assertThat(result.getFirst().myRole()).isEqualTo("ADMIN");
+        assertThat(result.getFirst().memberCount()).isEqualTo(2);
+        verify(users, never()).getOrCreateSession(any());
+    }
+
+    @Test
+    void getMyTeams_withoutSession_throwsSessionRequired() {
+        assertError(() -> service.getMyTeams(null), ErrorCode.SESSION_REQUIRED);
+        verifyNoInteractions(teams);
+    }
+
+    @Test
+    void getMyTeams_withoutMembership_returnsEmptyList() {
+        when(users.findBySessionToken("token")).thenReturn(Optional.of(user(10L, "hash", "익명")));
+        assertThat(service.getMyTeams("token")).isEmpty();
+    }
+
+    @Test
+    void getMembers_setsIsMeAndMapsProfiles() {
+        current(admin());
+        when(members.findActiveMemberProfiles(1L)).thenReturn(List.of(
+                new TeamMemberRow(1L, 10L, "관리자", TeamRole.ADMIN, NOW),
+                new TeamMemberRow(2L, 20L, "팀원", TeamRole.MEMBER, NOW)));
+        var result = service.getMembers(1L, "token");
+        assertThat(result).extracting(TeamMemberResponse::isMe).containsExactly(true, false);
+        assertThat(result.getLast().userId()).isEqualTo("user_20");
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void getMembers_nonMember_throwsNotTeamMember() {
+        assertError(() -> service.getMembers(1L, "token"), ErrorCode.NOT_TEAM_MEMBER);
+        verify(members, never()).findActiveMemberProfiles(any());
+    }
+
+    @Test
+    void deleteTeam_admin_deletesOwnedDataInOrder() {
+        current(admin());
+        var team = team();
+        when(teams.findById(1L)).thenReturn(Optional.of(team));
+        service.deleteTeam(1L, "token");
+        var order = inOrder(voteService, reviews, restaurants, members, teams);
+        order.verify(voteService).deleteTeamData(1L);
+        order.verify(reviews).deleteAllByTeamId(1L);
+        order.verify(restaurants).deleteAllByTeamId(1L);
+        order.verify(members).deleteAllByTeamId(1L);
+        order.verify(teams).delete(team);
+    }
+
+    @Test
+    void deleteTeam_member_throwsAdminRequiredWithoutDeleting() {
+        current(member());
+        assertError(() -> service.deleteTeam(1L, "token"), ErrorCode.ADMIN_REQUIRED);
+        verifyNoInteractions(voteService, reviews, restaurants, teams);
+    }
+
+    @Test
+    void deleteTeam_nonMember_throwsNotTeamMember() {
+        assertError(() -> service.deleteTeam(1L, "token"), ErrorCode.NOT_TEAM_MEMBER);
+        verifyNoInteractions(voteService, reviews, restaurants, teams);
+    }
+
+    @Test
+    void transferAndLeave_promotesTargetAndLeavesCurrentAdmin() {
+        var current = admin();
+        var target = member();
+        current(current);
+        when(members.findByIdAndTeamId(2L, 1L)).thenReturn(Optional.of(target));
+        service.transferAndLeave(1L, "token", 2L);
+        assertThat(target.isAdmin()).isTrue();
+        assertThat(current.isAdmin()).isFalse();
+        assertThat(current.getLeftAt()).isEqualTo(NOW.plusSeconds(60));
+        verifyNoInteractions(voteService, reviews, restaurants, teams);
+    }
+
+    @Test
+    void transferAndLeave_invalidTarget_doesNotChangeCurrentAdmin() {
+        var current = admin();
+        current(current);
+        assertError(() -> service.transferAndLeave(1L, "token", 99L), ErrorCode.MEMBER_NOT_FOUND);
+        assertThat(current.isAdmin()).isTrue();
+        assertThat(current.isActive()).isTrue();
+    }
+
+    @Test
+    void transferAndLeave_memberRequester_throwsAdminRequired() {
+        current(member());
+        assertError(() -> service.transferAndLeave(1L, "token", 1L), ErrorCode.ADMIN_REQUIRED);
+        verify(members, never()).findByIdAndTeamId(any(), any());
+    }
+
+    @Test
+    void regenerateInvitation_member_throwsAdminRequired() {
+        current(member());
+        assertError(() -> service.regenerateInvitation(1L, "token"), ErrorCode.ADMIN_REQUIRED);
+    }
+
+    @Test
+    void getInvitation_inactiveMember_throwsNotTeamMember() {
+        var inactive = member();
+        inactive.leave(NOW);
+        current(inactive);
+        assertError(() -> service.getInvitation(1L, "token"), ErrorCode.NOT_TEAM_MEMBER);
     }
 
     private void assertError(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, ErrorCode code) {

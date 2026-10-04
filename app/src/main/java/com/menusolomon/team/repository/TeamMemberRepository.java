@@ -10,6 +10,14 @@ import org.springframework.data.repository.query.Param;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
+    @Query("""
+            select new com.menusolomon.team.repository.TeamMemberRow(member.id, user.id, user.nickname, member.role, member.joinedAt)
+            from TeamMember member join User user on user.id = member.userId
+            where member.teamId = :teamId and member.leftAt is null
+            order by member.joinedAt asc, member.id asc
+            """)
+    List<TeamMemberRow> findActiveMemberProfiles(@Param("teamId") Long teamId);
+
     Optional<TeamMember> findByTeamIdAndUserId(Long teamId, Long userId);
 
     long countByTeamIdAndLeftAtIsNull(Long teamId);

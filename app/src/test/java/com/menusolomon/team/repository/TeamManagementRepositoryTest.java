@@ -1,5 +1,9 @@
 package com.menusolomon.team.repository;
 
+import com.menusolomon.team.domain.TeamRole;
+import com.menusolomon.user.repository.UserRepository;
+import com.menusolomon.user.domain.User;
+
 import static com.menusolomon.team.fixture.TeamFixture.NOW;
 import static org.assertj.core.api.Assertions.*;
 
@@ -26,6 +30,7 @@ class TeamManagementRepositoryTest {
     @Autowired RestaurantRepository restaurants;
     @Autowired TeamRestaurantRepository teamRestaurants;
     @Autowired ReviewRepository reviews;
+    @Autowired UserRepository users;
     @Autowired EntityManager entityManager;
     Team first;
     Team second;
@@ -34,6 +39,46 @@ class TeamManagementRepositoryTest {
     void setUp() {
         first = teams.save(Team.create("첫 팀", "", "first-token", NOW));
         second = teams.save(Team.create("다른 팀", "", "second-token", NOW));
+    }
+
+    @Test
+    void findMyTeams_excludesInactiveMembershipAndCountsOnlyActiveMembers() {
+        members.save(TeamMember.newAdmin(first.getId(), 10L, NOW));
+        var left = members.save(TeamMember.newMember(first.getId(), 20L, NOW));
+        left.leave(NOW);
+        var old = members.save(TeamMember.newMember(second.getId(), 10L, NOW));
+        old.leave(NOW);
+        members.saveAndFlush(TeamMember.newAdmin(second.getId(), 30L, NOW));
+        var result = teams.findMyTeams(10L);
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().teamId()).isEqualTo(first.getId());
+        assertThat(result.getFirst().memberCount()).isEqualTo(1);
+        assertThat(result.getFirst().role()).isEqualTo(TeamRole.ADMIN);
+        assertThat(teams.findMyTeams(99L)).isEmpty();
+    }
+
+    @Test
+    void findMyTeams_ordersByNameAndIncludesMultipleMemberships() {
+        first.changeInfo("가 팀", "", NOW);
+        second.changeInfo("나 팀", "", NOW);
+        members.save(TeamMember.newMember(second.getId(), 10L, NOW));
+        members.saveAndFlush(TeamMember.newAdmin(first.getId(), 10L, NOW));
+        assertThat(teams.findMyTeams(10L)).extracting(MyTeamRow::teamId).containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    void findActiveMemberProfiles_projectsNicknamesAndExcludesOtherTeamsAndInactiveMembers() {
+        var user = users.save(User.create("first-hash", "관리자", NOW));
+        var other = users.save(User.create("second-hash", "팀원", NOW));
+        var admin = members.save(TeamMember.newAdmin(first.getId(), user.getId(), NOW));
+        var left = members.save(TeamMember.newMember(first.getId(), other.getId(), NOW));
+        left.leave(NOW);
+        members.saveAndFlush(TeamMember.newAdmin(second.getId(), other.getId(), NOW));
+        var result = members.findActiveMemberProfiles(first.getId());
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().teamMemberId()).isEqualTo(admin.getId());
+        assertThat(result.getFirst().userId()).isEqualTo(user.getId());
+        assertThat(result.getFirst().nickname()).isEqualTo("관리자");
     }
 
     @Test
