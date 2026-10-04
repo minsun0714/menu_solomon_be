@@ -9,3 +9,8 @@ spring:
       ddl-auto: create-drop
     properties:
       hibernate.jdbc.time_zone: UTC
+
+app:
+  vote:
+    scheduler:
+      enabled: false

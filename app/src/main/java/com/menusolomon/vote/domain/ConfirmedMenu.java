@@ -2,6 +2,8 @@ package com.menusolomon.vote.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -11,35 +13,28 @@ import java.time.Instant;
 import lombok.Getter;
 
 @Entity
-@Table(name = "confirmed_menus", uniqueConstraints = @UniqueConstraint(columnNames = {"lunch_vote_session_id"}))
+@Table(name = "lunch_decisions", uniqueConstraints = @UniqueConstraint(name = "uk_lunch_decisions", columnNames = {"session_id"}))
 @Getter
 public class ConfirmedMenu {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(name = "lunch_vote_session_id", nullable = false, updatable = false)
-    private Long lunchVoteSessionId;
-
-    @Column(name = "vote_candidate_id", nullable = false)
-    private Long voteCandidateId;
-
-    @Column(name = "confirmed_by_team_member_id", nullable = false, updatable = false)
-    private Long confirmedByTeamMemberId;
-
-    @Column(name = "confirmed_at", nullable = false, updatable = false)
-    private Instant confirmedAt;
-
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "session_id", nullable = false, updatable = false) private Long sessionId;
+    @Column(name = "restaurant_id", nullable = false) private Long restaurantId;
+    @Column(name = "confirmed_by_team_member_id") private Long confirmedByTeamMemberId;
+    @Enumerated(EnumType.STRING) @Column(name = "confirmation_type", nullable = false) private ConfirmationType confirmationType;
+    @Column(name = "confirmed_at", nullable = false) private Instant confirmedAt;
     protected ConfirmedMenu() {}
-
-    private ConfirmedMenu(Long lunchVoteSessionId, Long voteCandidateId, Long confirmedByTeamMemberId, Instant now) {
-        this.lunchVoteSessionId = lunchVoteSessionId;
-        this.voteCandidateId = voteCandidateId;
-        this.confirmedByTeamMemberId = confirmedByTeamMemberId;
-        this.confirmedAt = now;
+    public static ConfirmedMenu automatic(Long sessionId, Long restaurantId, Instant now) {
+        return create(sessionId, restaurantId, null, ConfirmationType.AUTO, now);
     }
-
-    public static ConfirmedMenu create(Long lunchVoteSessionId, Long voteCandidateId, Long confirmedByTeamMemberId, Instant now) {
-        return new ConfirmedMenu(lunchVoteSessionId, voteCandidateId, confirmedByTeamMemberId, now);
+    public static ConfirmedMenu manual(Long sessionId, Long restaurantId, Long memberId, Instant now) {
+        return create(sessionId, restaurantId, memberId, ConfirmationType.MANUAL, now);
+    }
+    private static ConfirmedMenu create(Long sessionId, Long restaurantId, Long memberId, ConfirmationType type, Instant now) {
+        var decision = new ConfirmedMenu(); decision.sessionId = sessionId; decision.restaurantId = restaurantId;
+        decision.confirmedByTeamMemberId = memberId; decision.confirmationType = type; decision.confirmedAt = now; return decision;
+    }
+    public void changeRestaurant(Long restaurantId, Long memberId, Instant now) {
+        this.restaurantId = restaurantId; confirmedByTeamMemberId = memberId;
+        confirmationType = ConfirmationType.MANUAL; confirmedAt = now;
     }
 }

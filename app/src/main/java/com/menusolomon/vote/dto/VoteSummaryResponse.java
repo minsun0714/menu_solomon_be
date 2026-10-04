@@ -1,12 +1,9 @@
 package com.menusolomon.vote.dto;
 
-import com.menusolomon.vote.repository.VoteSummaryRow;
+import com.menusolomon.vote.domain.VoteStatus;
 import java.time.Instant;
-public record VoteSummaryResponse(String id, String title, String status, Instant createdAt,
-        long participantCount, long candidateCount, boolean myParticipation, String myVoteCandidateId) {
-    public static VoteSummaryResponse from(VoteSummaryRow row) {
-        return new VoteSummaryResponse("vote_" + row.id(), row.title(), row.status().name(), row.createdAt(),
-                row.participantCount(), row.candidateCount(), row.myParticipation(),
-                row.myVoteCandidateId() == null ? null : "candidate_" + row.myVoteCandidateId());
-    }
-}
+import java.util.List;
+
+public record VoteSummaryResponse(String id, String teamId, String name, String createdByTeamMemberId,
+        String creatorNickname, VoteStatus status, Instant closesAt, Instant createdAt,
+        long participantCount, long candidateCount, long ballotCount, List<String> myBallotCandidateIds) {}

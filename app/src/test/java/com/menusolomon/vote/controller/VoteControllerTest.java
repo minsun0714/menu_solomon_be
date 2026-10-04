@@ -6,13 +6,13 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.menusolomon.common.exception.BusinessException;
-import com.menusolomon.common.exception.ErrorCode;
+import com.menusolomon.common.exception.*;
 import com.menusolomon.common.web.WebConstants;
-import com.menusolomon.vote.domain.VoteStatus;
+import com.menusolomon.vote.domain.*;
 import com.menusolomon.vote.dto.*;
 import com.menusolomon.vote.service.VoteService;
 import jakarta.servlet.http.Cookie;
+import java.time.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,162 +23,152 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(VoteController.class)
+@WebMvcTest({VoteController.class,LunchHistoryController.class})
 class VoteControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean VoteService service;
-    private static final String ROOT = "/api/teams/team_1/votes";
-    private static final String VOTE = ROOT + "/vote_5";
-    private Cookie cookie() { return new Cookie(WebConstants.SESSION_COOKIE_NAME, "token"); }
+    private static final String ROOT="/api/teams/team_1/votes";
+    private static final String VOTE=ROOT+"/vote_5";
+    private Cookie cookie() { return new Cookie(WebConstants.SESSION_COOKIE_NAME,"token"); }
+    private DecisionResponse decision() { return new DecisionResponse("decision_1","vote_5","restaurant_3","member_1",ConfirmationType.MANUAL,NOW); }
 
-    @Test
-    void createVote_returns201() throws Exception {
-        when(service.createVote(1L, "token", "점심")).thenReturn(VoteCreateResponse.from(session()));
-        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"점심\"}"))
+    @Test void create_returns201WithNullableNameAndDeadline() throws Exception {
+        when(service.createVote(1L,"token",DEADLINE)).thenReturn(response());
+        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"closesAt\":\""+DEADLINE+"\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.data.id").value("vote_5"))
                 .andExpect(jsonPath("$.data.teamId").value("team_1"))
-                .andExpect(jsonPath("$.data.status").value("OPEN"))
-                .andExpect(jsonPath("$.data.createdAt").value(NOW.toString()))
-                .andExpect(header().doesNotExist("Set-Cookie"));
-        verify(service).createVote(1L, "token", "점심");
+                .andExpect(jsonPath("$.data.createdByTeamMemberId").value("member_1"))
+                .andExpect(jsonPath("$.data.name").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
     }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"title\":\" \"}"})
-    void createVote_blankTitle_returns400ProblemDetail(String body) throws Exception {
-        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-        verifyNoInteractions(service);
+    @Test void create_missingDeadline_returns400ProblemDetail() throws Exception {
+        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR")); verifyNoInteractions(service);
     }
-
-    @Test
-    void createVote_titleOver100_returns400ProblemDetail() throws Exception {
-        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"" + "가".repeat(101) + "\"}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    @Test void list_returnsCountsAndAllMySelectedIds() throws Exception {
+        when(service.getVotes(1L,"token")).thenReturn(List.of(new VoteSummaryResponse("vote_5","team_1",null,"member_1","익명",VoteStatus.OPEN,DEADLINE,NOW,2,3,1,List.of("candidate_100","candidate_200"))));
+        mvc.perform(get(ROOT).cookie(cookie())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].creatorNickname").value("익명"))
+                .andExpect(jsonPath("$.data[0].ballotCount").value(1))
+                .andExpect(jsonPath("$.data[0].myBallotCandidateIds[1]").value("candidate_200"));
     }
-
-    @Test
-    void getVotes_returns200_andBindsStatus() throws Exception {
-        when(service.getVotes(1L, "token", VoteStatus.OPEN)).thenReturn(List.of(VoteSummaryResponse.from(summary())));
-        mvc.perform(get(ROOT).cookie(cookie()).param("status", "OPEN")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].participantCount").value(2))
-                .andExpect(jsonPath("$.data[0].candidateCount").value(1))
-                .andExpect(jsonPath("$.data[0].myParticipation").value(true))
-                .andExpect(jsonPath("$.data[0].myVoteCandidateId").value("candidate_100"));
-        verify(service).getVotes(1L, "token", VoteStatus.OPEN);
-    }
-
-    @Test
-    void getVoteDetail_returns200() throws Exception {
-        when(service.getVoteDetail(1L, 5L, "token")).thenReturn(VoteDetailResponse.from(summary(),
-                List.of(new VoteParticipantResponse("member_1", "익명", true)),
-                List.of(VoteCandidateResponse.from(candidateRow(100L))), null));
+    @Test void detail_returnsSessionCreatorAndDecision() throws Exception {
+        when(service.getVoteDetail(1L,5L,"token")).thenReturn(new VoteDetailResponse(response(),"익명",decision()));
         mvc.perform(get(VOTE).cookie(cookie())).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value("vote_5"))
-                .andExpect(jsonPath("$.data.participants[0].nickname").value("익명"))
-                .andExpect(jsonPath("$.data.candidates[0].voteCount").value(2))
-                .andExpect(jsonPath("$.data.candidates[0].averageRating").value(4.5))
-                .andExpect(jsonPath("$.data.candidates[0].isMyVote").value(true));
-        verify(service).getVoteDetail(1L, 5L, "token");
+                .andExpect(jsonPath("$.data.session.id").value("vote_5"))
+                .andExpect(jsonPath("$.data.creatorNickname").value("익명"))
+                .andExpect(jsonPath("$.data.decision.confirmationType").value("MANUAL"));
     }
-
-    @Test
-    void updateParticipation_returns200() throws Exception {
-        when(service.updateParticipation(1L, 5L, "token", false)).thenReturn(new VoteParticipationResponse("member_1", false));
-        mvc.perform(put(VOTE + "/participants/me").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"participating\":false}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.participating").value(false));
-        verify(service).updateParticipation(1L, 5L, "token", false);
+    @Test void patch_bindsPartialNameOnly() throws Exception {
+        when(service.updateVote(eq(1L),eq(5L),eq("token"),any())).thenReturn(response());
+        mvc.perform(patch(VOTE).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"금요일 점심\"}"))
+                .andExpect(status().isOk());
+        verify(service).updateVote(1L,5L,"token",new VoteUpdateRequest("금요일 점심",null));
     }
-
-    @Test
-    void addCandidate_returns201() throws Exception {
-        when(service.addCandidate(1L, 5L, "token", 10L)).thenReturn(VoteCandidateResponse.from(candidateRow(100L)));
-        mvc.perform(post(VOTE + "/candidates").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"teamRestaurantId\":10}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.candidateId").value("candidate_100"))
-                .andExpect(jsonPath("$.data.restaurantId").value("restaurant_3"));
-        verify(service).addCandidate(1L, 5L, "token", 10L);
+    @Test void patch_bindsDeadlineOnly() throws Exception {
+        when(service.updateVote(eq(1L),eq(5L),eq("token"),any())).thenReturn(response());
+        mvc.perform(patch(VOTE).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"closesAt\":\""+DEADLINE+"\"}"))
+                .andExpect(status().isOk());
+        verify(service).updateVote(1L,5L,"token",new VoteUpdateRequest(null,DEADLINE));
     }
-
-    @Test
-    void addCandidate_duplicate_returns409ProblemDetail() throws Exception {
-        when(service.addCandidate(1L, 5L, "token", 10L)).thenThrow(new BusinessException(ErrorCode.VOTE_CANDIDATE_ALREADY_EXISTS));
-        mvc.perform(post(VOTE + "/candidates").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"teamRestaurantId\":10}"))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.code").value("VOTE_CANDIDATE_ALREADY_EXISTS"));
+    @ParameterizedTest @ValueSource(strings={"{}","{\"name\":null}","{\"closesAt\":null}","{\"name\":12}","{\"name\":\" \"}","{\"name\":\"12345678901234567890123456789012345678901\"}","{\"closesAt\":\"invalid\"}"})
+    void patch_invalidShape_returns400(String body) throws Exception {
+        mvc.perform(patch(VOTE).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR")); verifyNoInteractions(service);
     }
-
-    @Test
-    void vote_returns200() throws Exception {
-        when(service.vote(1L, 5L, "token", 100L)).thenReturn(VoteCandidateResponse.from(candidateRow(100L)));
-        mvc.perform(put(VOTE + "/vote").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"voteCandidateId\":100}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.isMyVote").value(true));
-        verify(service).vote(1L, 5L, "token", 100L);
+    @Test void delete_returns204() throws Exception {
+        mvc.perform(delete(VOTE).cookie(cookie())).andExpect(status().isNoContent()); verify(service).deleteVote(1L,5L,"token");
     }
-
-    @Test
-    void vote_nonParticipant_returns409ProblemDetail() throws Exception {
-        when(service.vote(1L, 5L, "token", 100L)).thenThrow(new BusinessException(ErrorCode.VOTE_PARTICIPATION_REQUIRED));
-        mvc.perform(put(VOTE + "/vote").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"voteCandidateId\":100}"))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VOTE_PARTICIPATION_REQUIRED"));
+    @Test void restart_returnsSession() throws Exception {
+        when(service.restart(1L,5L,"token")).thenReturn(response());
+        mvc.perform(post(VOTE+"/restart").cookie(cookie())).andExpect(status().isOk()).andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
     }
-
-    @Test
-    void confirmVote_returns200() throws Exception {
-        when(service.confirm(1L, 5L, "token", 100L)).thenReturn(new VoteConfirmResponse("vote_5", "CONFIRMED", ConfirmedMenuResponse.from(result())));
-        mvc.perform(post(VOTE + "/confirm").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"voteCandidateId\":100}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("CONFIRMED"))
-                .andExpect(jsonPath("$.data.confirmedMenu.candidateId").value("candidate_100"))
-                .andExpect(jsonPath("$.data.confirmedMenu.confirmedAt").value(NOW.toString()));
+    @Test void participants_returnsParticipantContract() throws Exception {
+        when(service.getParticipants(1L,5L,"token")).thenReturn(List.of(new VoteParticipantResponse("participant_7","vote_5","member_1","익명",true)));
+        mvc.perform(get(VOTE+"/participants").cookie(cookie())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value("participant_7"))
+                .andExpect(jsonPath("$.data[0].sessionId").value("vote_5"));
     }
-
-    @Test
-    void confirmAlreadyConfirmed_returns409ProblemDetail() throws Exception {
-        when(service.confirm(1L, 5L, "token", 100L)).thenThrow(new BusinessException(ErrorCode.VOTE_ALREADY_CONFIRMED));
-        mvc.perform(post(VOTE + "/confirm").cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"voteCandidateId\":100}"))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VOTE_ALREADY_CONFIRMED"));
+    @Test void participation_bindsOtherMemberAndReturnsNickname() throws Exception {
+        when(service.updateParticipation(1L,5L,"token",2L,false)).thenReturn(new VoteParticipantResponse("participant_7","vote_5","member_2","팀원",false));
+        mvc.perform(put(VOTE+"/participants/member_2").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"participating\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.nickname").value("팀원"));
+        verify(service).updateParticipation(1L,5L,"token",2L,false);
     }
-
-    @Test
-    void getHistory_returns200() throws Exception {
-        when(service.getHistory(1L, "token")).thenReturn(List.of(new VoteHistoryResponse("vote_5", "점심", NOW, "restaurant_3", "을지다락", 2, 3)));
-        mvc.perform(get(ROOT + "/history").cookie(cookie())).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].restaurantName").value("을지다락"))
-                .andExpect(jsonPath("$.data[0].voteCount").value(2));
-        verify(service).getHistory(1L, "token");
+    @Test void addCandidate_bindsKakaoPlaceAndSource() throws Exception {
+        when(service.addCandidate(eq(1L),eq(5L),eq("token"),any())).thenReturn(candidateRow(100L).response());
+        mvc.perform(post(VOTE+"/candidates").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"kakaoPlaceId\":\"123\",\"source\":\"MANUAL\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.id").value("candidate_100"))
+                .andExpect(jsonPath("$.data.restaurant.kakaoPlaceId").value("123"))
+                .andExpect(jsonPath("$.data.averageRating").value(4.5));
+        verify(service).addCandidate(1L,5L,"token",new VoteCandidateCreateRequest("123",CandidateSource.MANUAL));
     }
-
-    @Test
-    void missingSession_returns403WithoutCreatingSession() throws Exception {
-        when(service.getVotes(1L, null, null)).thenThrow(new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
+    @Test void candidates_returnsCandidateArray() throws Exception {
+        when(service.getCandidates(1L,5L,"token")).thenReturn(List.of(candidateRow(100L).response()));
+        mvc.perform(get(VOTE+"/candidates").cookie(cookie())).andExpect(status().isOk()).andExpect(jsonPath("$.data[0].source").value("MANUAL"));
+    }
+    @Test void deleteCandidate_returns204() throws Exception {
+        mvc.perform(delete(VOTE+"/candidates/candidate_100").cookie(cookie())).andExpect(status().isNoContent()); verify(service).deleteCandidate(1L,5L,"token",100L);
+    }
+    @Test void recommend_bindsCursorAndReturnsOneRestaurant() throws Exception {
+        when(service.recommend(1L,5L,"token",2)).thenReturn(new RecommendationResponse(List.of(new RecommendationItem(candidateRow(100L).response().restaurant(),4.5,"추천")),3));
+        mvc.perform(get(VOTE+"/recommendations").cookie(cookie()).param("cursor","2")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].restaurant.id").value("restaurant_3"))
+                .andExpect(jsonPath("$.data.nextCursor").value(3));
+    }
+    @Test void recommend_negativeCursor_returns400() throws Exception {
+        mvc.perform(get(VOTE+"/recommendations").cookie(cookie()).param("cursor","-1")).andExpect(status().isBadRequest()); verifyNoInteractions(service);
+    }
+    @Test void saveBallots_bindsMultipleNumericCandidateIds() throws Exception {
+        when(service.saveBallots(1L,5L,"token",List.of(100L,200L))).thenReturn(List.of(ballot()));
+        mvc.perform(put(VOTE+"/ballots/me").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"candidateIds\":[100,200]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value("ballot_1"))
+                .andExpect(jsonPath("$.data[0].candidateId").value("candidate_100"));
+    }
+    @ParameterizedTest @ValueSource(strings={"{}","{\"candidateIds\":[]}","{\"candidateIds\":[0]}","{\"candidateIds\":[null]}"})
+    void saveBallots_invalidArray_returns400(String body) throws Exception {
+        mvc.perform(put(VOTE+"/ballots/me").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR")); verifyNoInteractions(service);
+    }
+    @Test void cancelBallots_returns204() throws Exception {
+        mvc.perform(delete(VOTE+"/ballots/me").cookie(cookie())).andExpect(status().isNoContent()); verify(service).cancelBallots(1L,5L,"token");
+    }
+    @Test void results_returnsPercentagesAndBallots() throws Exception {
+        when(service.getResults(1L,5L,"token")).thenReturn(new VoteResultsResponse(List.of(new VoteResultItem("candidate_100",3,75)),List.of(ballot())));
+        mvc.perform(get(VOTE+"/results").cookie(cookie())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.results[0].percentage").value(75))
+                .andExpect(jsonPath("$.data.ballots[0].sessionId").value("vote_5"));
+    }
+    @Test void decision_createReturns201_editReturns200_deleteReturns204() throws Exception {
+        when(service.createDecision(1L,5L,"token",3L)).thenReturn(decision());
+        when(service.updateDecision(1L,5L,"token",3L)).thenReturn(decision());
+        mvc.perform(post(VOTE+"/decision").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"restaurantId\":3}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.id").value("decision_1"));
+        mvc.perform(patch(VOTE+"/decision").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"restaurantId\":3}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.confirmedByTeamMemberId").value("member_1"));
+        mvc.perform(delete(VOTE+"/decision").cookie(cookie())).andExpect(status().isNoContent()); verify(service).deleteDecision(1L,5L,"token");
+    }
+    @Test void creatorOnlyAction_returns403ProblemDetail() throws Exception {
+        when(service.restart(1L,5L,"token")).thenThrow(new BusinessException(ErrorCode.VOTE_CREATOR_REQUIRED));
+        mvc.perform(post(VOTE+"/restart").cookie(cookie())).andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)).andExpect(jsonPath("$.code").value("VOTE_CREATOR_REQUIRED"));
+    }
+    @Test void closedVoteMutation_returns409ProblemDetail() throws Exception {
+        when(service.saveBallots(eq(1L),eq(5L),eq("token"),any())).thenThrow(new BusinessException(ErrorCode.VOTE_NOT_OPEN));
+        mvc.perform(put(VOTE+"/ballots/me").cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"candidateIds\":[100]}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("VOTE_NOT_OPEN"));
+    }
+    @Test void nonMemberRead_returns403WithoutCreatingCookie() throws Exception {
+        when(service.getVotes(1L,null)).thenThrow(new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
         mvc.perform(get(ROOT)).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_TEAM_MEMBER"))
                 .andExpect(header().doesNotExist("Set-Cookie"));
     }
-
-    @Test
-    void otherTeamVote_returns404ProblemDetail() throws Exception {
-        when(service.getVoteDetail(1L, 5L, "token")).thenThrow(new BusinessException(ErrorCode.VOTE_NOT_FOUND));
-        mvc.perform(get(VOTE).cookie(cookie())).andExpect(status().isNotFound())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("VOTE_NOT_FOUND"));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"/vote", "/participants/me"})
-    void missingRequiredMutationField_returns400ProblemDetail(String path) throws Exception {
-        mvc.perform(put(VOTE + path).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
-        verifyNoInteractions(service);
+    @Test void history_bindsSeoulWeekAndMonthParameters() throws Exception {
+        mvc.perform(get("/api/teams/team_1/lunch-history").cookie(cookie()).param("view","WEEK").param("date","2026-10-04"))
+                .andExpect(status().isOk());
+        verify(service).getHistory(1L,"token","WEEK",LocalDate.of(2026,10,4),null);
+        mvc.perform(get("/api/teams/1/lunch-history").cookie(cookie()).param("view","MONTH").param("month","2026-10"))
+                .andExpect(status().isOk());
+        verify(service).getHistory(1L,"token","MONTH",null,YearMonth.of(2026,10));
     }
 }
