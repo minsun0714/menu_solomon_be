@@ -113,6 +113,11 @@ public class TeamMember {
         target.promoteToAdmin();
     }
 
+    public void transferAdminAndLeave(TeamMember target, Instant now) {
+        transferAdminTo(target);
+        leave(now);
+    }
+
     public boolean shouldDeleteTeamOnLeave(long activeMemberCount) {
         requireActive();
         if (isAdmin() && activeMemberCount > 1) {

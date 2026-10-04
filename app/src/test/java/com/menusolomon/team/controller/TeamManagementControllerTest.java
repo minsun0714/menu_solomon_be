@@ -1,5 +1,9 @@
 package com.menusolomon.team.controller;
 
+import java.util.List;
+import com.menusolomon.team.dto.TeamMemberResponse;
+import com.menusolomon.team.dto.MyTeamResponse;
+
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -29,6 +33,88 @@ import org.springframework.test.web.servlet.MockMvc;
 class TeamManagementControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean TeamService service;
+    @Test
+    void getMyTeams_returnsActiveMembershipContract() throws Exception {
+        when(service.getMyTeams("token")).thenReturn(List.of(
+                new MyTeamResponse("team_1", "팀", "소개", "ADMIN", 2)));
+        mvc.perform(get("/api/teams").cookie(cookie())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].teamId").value("team_1"))
+                .andExpect(jsonPath("$.data[0].name").value("팀"))
+                .andExpect(jsonPath("$.data[0].description").value("소개"))
+                .andExpect(jsonPath("$.data[0].myRole").value("ADMIN"))
+                .andExpect(jsonPath("$.data[0].memberCount").value(2))
+                .andExpect(header().doesNotExist("Set-Cookie"));
+        verify(service).getMyTeams("token");
+    }
+
+    @Test
+    void getMyTeams_withoutSession_returns401ProblemDetail() throws Exception {
+        when(service.getMyTeams(null)).thenThrow(new BusinessException(ErrorCode.SESSION_REQUIRED));
+        mvc.perform(get("/api/teams")).andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("SESSION_REQUIRED"));
+    }
+
+    @Test
+    void getMembers_returnsProfilesAndIsMe() throws Exception {
+        when(service.getMembers(1L, "token")).thenReturn(List.of(
+                new TeamMemberResponse("member_1", "user_10", "익명", "ADMIN",
+                        com.menusolomon.team.fixture.TeamFixture.NOW, true)));
+        mvc.perform(get("/api/teams/team_1/members").cookie(cookie())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].teamMemberId").value("member_1"))
+                .andExpect(jsonPath("$.data[0].userId").value("user_10"))
+                .andExpect(jsonPath("$.data[0].nickname").value("익명"))
+                .andExpect(jsonPath("$.data[0].role").value("ADMIN"))
+                .andExpect(jsonPath("$.data[0].joinedAt").value("2026-10-04T08:30:00Z"))
+                .andExpect(jsonPath("$.data[0].isMe").value(true));
+        verify(service).getMembers(1L, "token");
+    }
+
+    @Test
+    void getMembers_nonMember_returns403ProblemDetail() throws Exception {
+        when(service.getMembers(1L, "token")).thenThrow(new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
+        mvc.perform(get("/api/teams/1/members").cookie(cookie())).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("NOT_TEAM_MEMBER"));
+    }
+
+    @Test
+    void deleteTeam_returns204() throws Exception {
+        mvc.perform(delete("/api/teams/team_1").cookie(cookie())).andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+        verify(service).deleteTeam(1L, "token");
+    }
+
+    @Test
+    void deleteTeam_member_returns403ProblemDetail() throws Exception {
+        doThrow(new BusinessException(ErrorCode.ADMIN_REQUIRED)).when(service).deleteTeam(1L, "token");
+        mvc.perform(delete("/api/teams/1").cookie(cookie())).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADMIN_REQUIRED"));
+    }
+
+    @Test
+    void transferAndLeave_returns204AndBindsTarget() throws Exception {
+        mvc.perform(post("/api/teams/team_1/transfer-and-leave").cookie(cookie())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"targetTeamMemberId\":10}"))
+                .andExpect(status().isNoContent()).andExpect(content().string(""));
+        verify(service).transferAndLeave(1L, "token", 10L);
+    }
+
+    @Test
+    void transferAndLeave_invalidTarget_returns400WithoutServiceCall() throws Exception {
+        mvc.perform(post("/api/teams/1/transfer-and-leave").cookie(cookie())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"targetTeamMemberId\":0}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void transferAndLeave_unknownTarget_returns404ProblemDetail() throws Exception {
+        doThrow(new BusinessException(ErrorCode.MEMBER_NOT_FOUND)).when(service).transferAndLeave(1L, "token", 10L);
+        mvc.perform(post("/api/teams/1/transfer-and-leave").cookie(cookie())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"targetTeamMemberId\":10}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("MEMBER_NOT_FOUND"));
+    }
+
     private Cookie cookie() { return new Cookie(WebConstants.SESSION_COOKIE_NAME, "token"); }
     private static final String OFFICE = """
             {"kakaoPlaceId":"123","name":"엔셀","address":"서울","latitude":37.123,"longitude":127.123}

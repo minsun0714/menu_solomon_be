@@ -59,6 +59,48 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 
 ## 3. 팀과 초대
 
+### GET `/teams`
+
+현재 유효한 익명 세션의 ACTIVE 소속 팀을 페이지네이션 없이 이름순(동일 이름은 ID순) 반환한다.
+세션 누락·무효: `401 SESSION_REQUIRED`. 사용자를 새로 만들지 않는다.
+유효한 사용자에게 소속 팀이 없으면 `200`과 빈 배열을 반환한다. 먼저 `/session/me`로 사용자 식별 가능.
+현재 sort 쿼리와 최근 확정 점심 필드는 제공하지 않는다.
+
+```json
+{ "data": [{ "teamId": "team_1", "name": "솔로몬 개발팀", "description": "점심 메뉴를 함께 정해요", "myRole": "ADMIN", "memberCount": 6 }] }
+```
+
+`teamId`는 팀 상세의 `id`와 같은 문자열 ID다. memberCount는 ACTIVE 팀원만 계산한다.
+
+### GET `/teams/{teamId}/members`
+
+권한: ACTIVE 팀원. 성공: `200`. ACTIVE 멤버만 joinedAt·ID 오름차순으로 반환한다.
+`isMe`는 현재 세션 사용자의 팀 멤버 여부다. 비팀원·탈퇴자·세션 누락은 `403 NOT_TEAM_MEMBER`.
+
+```json
+{ "data": [{ "teamMemberId": "member_1", "userId": "user_1", "nickname": "익명 사용자 1234", "role": "ADMIN", "joinedAt": "2026-10-04T04:00:00Z", "isMe": true }] }
+```
+
+### DELETE `/teams/{teamId}`
+
+권한: ACTIVE ADMIN. 성공: `204`, 본문 없음.
+팀의 투표·확정 결과, 리뷰, 팀 식당 연결, 팀원, 팀을 한 트랜잭션으로 삭제한다.
+다른 팀 데이터와 공유 Restaurant, User는 유지한다.
+오류: `NOT_TEAM_MEMBER`, `ADMIN_REQUIRED`, `TEAM_NOT_FOUND`.
+
+### POST `/teams/{teamId}/transfer-and-leave`
+
+권한: ACTIVE ADMIN. 성공: `204`, 본문 없음.
+
+```json
+{ "targetTeamMemberId": 10 }
+```
+
+필수 양의 정수. 같은 팀의 다른 ACTIVE MEMBER에게 ADMIN을 위임하고,
+현재 ADMIN을 MEMBER로 변경한 뒤 탈퇴 처리한다. 두 변경은 하나의 트랜잭션으로 커밋/롤백된다.
+팀은 유지되며 기존 admin-transfer API도 유지된다.
+오류: `VALIDATION_ERROR`, `NOT_TEAM_MEMBER`, `ADMIN_REQUIRED`, `MEMBER_NOT_FOUND`.
+
 ### POST `/teams`
 
 권한: 익명 사용자, 필요 시 세션 자동 발급. 성공: `201`.
@@ -130,7 +172,7 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 
 ### GET `/teams/{teamId}/invitation`
 
-권한: ACTIVE ADMIN. 성공: `200`.
+권한: ACTIVE 팀원(ADMIN과 MEMBER 모두). 성공: `200`.
 
 ```json
 { "data": { "inviteUrl": "https://example.com/invite/{token}" } }
@@ -140,7 +182,7 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 
 권한: ACTIVE ADMIN. 본문 없음. 성공: `200`, 응답은 위 초대 링크 응답과 동일.
 기존 토큰은 즉시 무효화된다. 링크의 Origin은 `FRONTEND_ORIGIN` 사용.
-두 초대 링크 API 오류: `NOT_TEAM_MEMBER`, `ADMIN_REQUIRED`, `TEAM_NOT_FOUND`.
+초대 링크 조회 오류: `NOT_TEAM_MEMBER`, `TEAM_NOT_FOUND`. 재발급은 추가로 `ADMIN_REQUIRED` 반환 가능.
 
 ### POST `/teams/{teamId}/admin-transfer`
 
@@ -165,7 +207,7 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 - MEMBER: 탈퇴 시각 설정.
 - 다른 ACTIVE 팀원이 있는 ADMIN: `409 ADMIN_TRANSFER_REQUIRED`.
 - 마지막 ACTIVE ADMIN: 팀, 팀원, 팀 식당, 리뷰, 투표 및 확정 결과 삭제. 공유 Restaurant와 User는 유지.
-- 위임 후 탈퇴하려면 관리자 위임 API 성공 후 이 API를 호출한다. 통합 API는 현재 없음.
+- 관리자 위임과 탈퇴를 한 번에 처리하려면 `/teams/{teamId}/transfer-and-leave`를 사용한다.
 
 ## 4. 사무실 위치
 
@@ -423,8 +465,6 @@ averageRating은 해당 팀 식당 리뷰 평균이며 리뷰 없으면 null.
 
 ## 10. 현재 제공하지 않는 API
 
-- 내 팀 목록, 독립적인 팀원 목록, 명시적인 팀 삭제 API
-- 관리자 위임·탈퇴 통합 API
 - 로그아웃, 닉네임/프로필 수정
 - 사무실 해제 및 `/office-location` 경로
 - 투표 제목 수정·삭제·재시작·후보 삭제·투표 취소 API

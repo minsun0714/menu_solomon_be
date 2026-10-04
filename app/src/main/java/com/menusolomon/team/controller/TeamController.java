@@ -3,6 +3,9 @@ package com.menusolomon.team.controller;
 import com.menusolomon.common.response.ApiResponse;
 import com.menusolomon.common.web.WebConstants;
 import com.menusolomon.common.web.SessionCookies;
+import com.menusolomon.team.dto.MyTeamResponse;
+import com.menusolomon.team.dto.TeamMemberResponse;
+import java.util.List;
 import com.menusolomon.team.dto.TeamUpdateRequest;
 import com.menusolomon.team.dto.TeamUpdateResponse;
 import com.menusolomon.team.dto.InvitationResponse;
@@ -36,6 +39,33 @@ public class TeamController {
 
     public TeamController(TeamService teamService) {
         this.teamService = teamService;
+    }
+
+    @GetMapping
+    public ApiResponse<List<MyTeamResponse>> getMyTeams(
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token) {
+        return ApiResponse.of(teamService.getMyTeams(token));
+    }
+
+    @GetMapping("/{teamId}/members")
+    public ApiResponse<List<TeamMemberResponse>> getMembers(@PathVariable Long teamId,
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token) {
+        return ApiResponse.of(teamService.getMembers(teamId, token));
+    }
+
+    @DeleteMapping("/{teamId}")
+    public ResponseEntity<Void> deleteTeam(@PathVariable Long teamId,
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token) {
+        teamService.deleteTeam(teamId, token);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{teamId}/transfer-and-leave")
+    public ResponseEntity<Void> transferAndLeave(@PathVariable Long teamId,
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token,
+            @Valid @RequestBody AdminTransferRequest request) {
+        teamService.transferAndLeave(teamId, token, request.targetTeamMemberId());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{teamId}")

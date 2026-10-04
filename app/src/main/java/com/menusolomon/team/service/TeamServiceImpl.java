@@ -4,6 +4,8 @@ import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.team.domain.Team;
 import com.menusolomon.team.domain.TeamMember;
+import com.menusolomon.team.dto.MyTeamResponse;
+import com.menusolomon.team.dto.TeamMemberResponse;
 import com.menusolomon.team.dto.TeamUpdateRequest;
 import com.menusolomon.team.dto.TeamUpdateResponse;
 import com.menusolomon.team.dto.InvitationResponse;
@@ -74,6 +76,39 @@ public class TeamServiceImpl implements TeamService {
         this.voteService = voteService;
         this.clock = clock;
         this.frontendBaseUrl = frontendBaseUrl.replaceAll("/+$", "");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MyTeamResponse> getMyTeams(String rawSessionToken) {
+        User user = userService.findBySessionToken(rawSessionToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_REQUIRED));
+        return teamRepository.findMyTeams(user.getId()).stream().map(MyTeamResponse::from).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TeamMemberResponse> getMembers(Long teamId, String rawSessionToken) {
+        TeamMember current = requireActiveMember(teamId, rawSessionToken);
+        return teamMemberRepository.findActiveMemberProfiles(teamId).stream()
+                .map(row -> TeamMemberResponse.from(row, current.getId())).toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteTeam(Long teamId, String rawSessionToken) {
+        requireActiveMember(teamId, rawSessionToken).requireAdmin();
+        deleteTeamOwnedData(requireTeam(teamId));
+    }
+
+    @Override
+    @Transactional
+    public void transferAndLeave(Long teamId, String rawSessionToken, Long targetTeamMemberId) {
+        TeamMember current = requireActiveMember(teamId, rawSessionToken);
+        current.requireAdmin();
+        TeamMember target = teamMemberRepository.findByIdAndTeamId(targetTeamMemberId, teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        current.transferAdminAndLeave(target, Instant.now(clock));
     }
 
     @Override
@@ -149,7 +184,7 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional(readOnly = true)
     public InvitationResponse getInvitation(Long teamId, String rawSessionToken) {
-        requireActiveMember(teamId, rawSessionToken).requireAdmin();
+        requireActiveMember(teamId, rawSessionToken);
         return invitation(requireTeam(teamId));
     }
 
@@ -179,12 +214,7 @@ public class TeamServiceImpl implements TeamService {
         TeamMember member = requireActiveMember(teamId, rawSessionToken);
         long activeCount = teamMemberRepository.countByTeamIdAndLeftAtIsNull(teamId);
         if (member.shouldDeleteTeamOnLeave(activeCount)) {
-            Team team = requireTeam(teamId);
-            voteService.deleteTeamData(teamId);
-            reviewRepository.deleteAllByTeamId(teamId);
-            teamRestaurantRepository.deleteAllByTeamId(teamId);
-            teamMemberRepository.deleteAllByTeamId(teamId);
-            teamRepository.delete(team);
+            deleteTeamOwnedData(requireTeam(teamId));
         } else {
             member.leave(Instant.now(clock));
         }
@@ -205,6 +235,15 @@ public class TeamServiceImpl implements TeamService {
         team.changeOfficeLocation(request.kakaoPlaceId(), request.name(), request.address(),
                 request.latitude(), request.longitude(), Instant.now(clock));
         return OfficeLocationResponse.from(team);
+    }
+
+    private void deleteTeamOwnedData(Team team) {
+        Long teamId = team.getId();
+        voteService.deleteTeamData(teamId);
+        reviewRepository.deleteAllByTeamId(teamId);
+        teamRestaurantRepository.deleteAllByTeamId(teamId);
+        teamMemberRepository.deleteAllByTeamId(teamId);
+        teamRepository.delete(team);
     }
 
     private TeamMember requireActiveMember(Long teamId, String rawSessionToken) {
