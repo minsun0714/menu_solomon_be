@@ -24,6 +24,7 @@ import com.menusolomon.team.repository.TeamRepository;
 import com.menusolomon.user.domain.User;
 import com.menusolomon.user.repository.UserRepository;
 import com.menusolomon.user.service.UserService;
+import com.menusolomon.user.dto.UserSession;
 import java.time.Clock;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -59,7 +60,7 @@ class TeamServiceImplTest {
     @Test
     @DisplayName("활성 관리자는 팀 상세와 활성 멤버 수를 조회한다")
     void getTeamDetail_activeAdmin_returnsTeamAndActiveCount() {
-        when(userService.getBySessionToken(TOKEN)).thenReturn(user(10L, "hash", "관리자"));
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.of(user(10L, "hash", "관리자")));
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team()));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 10L)).thenReturn(Optional.of(admin()));
         when(teamMemberRepository.countByTeamIdAndLeftAtIsNull(1L)).thenReturn(6L);
@@ -72,13 +73,14 @@ class TeamServiceImplTest {
         assertThat(response.memberCount()).isEqualTo(6);
         assertThat(response.myRole()).isEqualTo("ADMIN");
         verify(userService, never()).getOrCreateBySessionToken(any());
+        verify(userService, never()).getOrCreateSession(any());
         verifyNoInteractions(userRepository);
     }
 
     @Test
     @DisplayName("활성 일반 멤버의 팀 상세 역할은 MEMBER다")
     void getTeamDetail_activeMember_returnsMemberRole() {
-        when(userService.getBySessionToken(TOKEN)).thenReturn(user(20L, "hash", "멤버"));
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.of(user(20L, "hash", "멤버")));
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team()));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 20L)).thenReturn(Optional.of(member()));
         when(teamMemberRepository.countByTeamIdAndLeftAtIsNull(1L)).thenReturn(2L);
@@ -89,7 +91,7 @@ class TeamServiceImplTest {
     @Test
     @DisplayName("가입한 적 없는 사용자는 NOT_TEAM_MEMBER이며 인원 집계도 하지 않는다")
     void getTeamDetail_nonMember_throwsNotTeamMember() {
-        when(userService.getBySessionToken(TOKEN)).thenReturn(user(20L, "hash", "외부인"));
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.of(user(20L, "hash", "외부인")));
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team()));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 20L)).thenReturn(Optional.empty());
 
@@ -104,7 +106,7 @@ class TeamServiceImplTest {
     void getTeamDetail_inactiveMember_throwsNotTeamMember() {
         TeamMember left = member();
         left.leave(NOW.plusSeconds(1));
-        when(userService.getBySessionToken(TOKEN)).thenReturn(user(20L, "hash", "탈퇴자"));
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.of(user(20L, "hash", "탈퇴자")));
         when(teamRepository.findById(1L)).thenReturn(Optional.of(team()));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 20L)).thenReturn(Optional.of(left));
 
@@ -116,20 +118,21 @@ class TeamServiceImplTest {
 
     @Test
     @DisplayName("팀 상세의 무효 세션은 사용자 생성이나 팀 조회 없이 거절한다")
-    void getTeamDetail_invalidSession_neverCreatesUserOrQueriesTeam() {
-        when(userService.getBySessionToken(TOKEN)).thenThrow(new BusinessException(ErrorCode.SESSION_REQUIRED));
+    void getTeamDetail_invalidSession_returnsNotTeamMemberWithoutQueries() {
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teamService.getTeamDetail(1L, TOKEN))
-                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REQUIRED);
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NOT_TEAM_MEMBER);
 
         verify(userService, never()).getOrCreateBySessionToken(any());
+        verify(userService, never()).getOrCreateSession(any());
         verifyNoInteractions(teamRepository, teamMemberRepository, userRepository);
     }
 
     @Test
     @DisplayName("존재하지 않는 팀은 TEAM_NOT_FOUND다")
     void getTeamDetail_missingTeam_throwsTeamNotFound() {
-        when(userService.getBySessionToken(TOKEN)).thenReturn(user(10L, "hash", "사용자"));
+        when(userService.findBySessionToken(TOKEN)).thenReturn(Optional.of(user(10L, "hash", "사용자")));
         when(teamRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> teamService.getTeamDetail(1L, TOKEN))
@@ -141,14 +144,14 @@ class TeamServiceImplTest {
     @Test
     @DisplayName("팀 생성은 생성자를 ADMIN으로 등록하고 완성된 초대 링크를 반환한다")
     void createTeam_savesTeamAndInitialAdminWithInvitation() {
-        when(userService.getOrCreateBySessionToken(TOKEN)).thenReturn(user(10L, "hash", "생성자"));
+        when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(10L, "hash", "생성자"), null));
         when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
             Team saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 1L);
             return saved;
         });
 
-        var response = teamService.createTeam(new TeamCreateRequest("새 팀", null), TOKEN);
+        var response = teamService.createTeam(new TeamCreateRequest("새 팀", null), TOKEN).team();
 
         ArgumentCaptor<Team> teams = ArgumentCaptor.forClass(Team.class);
         ArgumentCaptor<TeamMember> members = ArgumentCaptor.forClass(TeamMember.class);
@@ -183,6 +186,7 @@ class TeamServiceImplTest {
         assertThat(response.members()).extracting(row -> row.user().nickname()).containsExactly("관리자", "멤버");
         assertThat(response.members().getFirst().user().id()).isEqualTo("user_10");
         verify(userService, never()).getOrCreateBySessionToken(any());
+        verify(userService, never()).getOrCreateSession(any());
     }
 
     @Test
@@ -208,6 +212,7 @@ class TeamServiceImplTest {
         assertThat(response.isAlreadyMember()).isFalse();
         assertThat(response.memberCount()).isZero();
         verify(userService, never()).getOrCreateBySessionToken(any());
+        verify(userService, never()).getOrCreateSession(any());
     }
 
     @Test
@@ -225,7 +230,7 @@ class TeamServiceImplTest {
     @DisplayName("신규 가입은 MEMBER를 생성하고 created true를 반환한다")
     void joinTeam_newMember_createsMember() {
         when(teamRepository.findByInviteToken("invite-token")).thenReturn(Optional.of(team()));
-        when(userService.getOrCreateBySessionToken(TOKEN)).thenReturn(user(20L, "hash", "멤버"));
+        when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(20L, "hash", "멤버"), null));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 20L)).thenReturn(Optional.empty());
         when(teamMemberRepository.save(any(TeamMember.class))).thenAnswer(invocation -> {
             TeamMember saved = invocation.getArgument(0);
@@ -248,7 +253,7 @@ class TeamServiceImplTest {
     @DisplayName("기존 관리자의 반복 가입은 역할과 가입 시각을 유지하고 중복 저장하지 않는다")
     void joinTeam_existingAdmin_returnsExistingMemberWithoutSave() {
         when(teamRepository.findByInviteToken("invite-token")).thenReturn(Optional.of(team()));
-        when(userService.getOrCreateBySessionToken(TOKEN)).thenReturn(user(10L, "hash", "관리자"));
+        when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(10L, "hash", "관리자"), null));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 10L)).thenReturn(Optional.of(admin()));
 
         var result = teamService.joinTeam("invite-token", TOKEN);
@@ -266,7 +271,7 @@ class TeamServiceImplTest {
         TeamMember former = admin();
         former.leave(NOW.plusSeconds(1));
         when(teamRepository.findByInviteToken("invite-token")).thenReturn(Optional.of(team()));
-        when(userService.getOrCreateBySessionToken(TOKEN)).thenReturn(user(10L, "hash", "탈퇴자"));
+        when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(10L, "hash", "탈퇴자"), null));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 10L)).thenReturn(Optional.of(former));
 
         var result = teamService.joinTeam("invite-token", TOKEN);
@@ -289,4 +294,43 @@ class TeamServiceImplTest {
 
         verifyNoInteractions(userService, teamMemberRepository, userRepository);
     }
+    @Test
+    @DisplayName("쿠키 없는 팀 상세는 팀 데이터를 조회하지 않고 NOT_TEAM_MEMBER다")
+    void getTeamDetail_withoutCookie_returnsNotTeamMemberWithoutCreatingIdentity() {
+        assertThatThrownBy(() -> teamService.getTeamDetail(1L, null))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NOT_TEAM_MEMBER);
+        verify(userService).findBySessionToken(null);
+        verify(userService, never()).getOrCreateSession(any());
+        verifyNoInteractions(teamRepository, teamMemberRepository, userRepository);
+    }
+
+    @Test
+    @DisplayName("최초 팀 생성은 새 세션 토큰을 웹 계층에 전달한다")
+    void createTeam_withoutCookie_propagatesIssuedSessionToken() {
+        when(userService.getOrCreateSession(null)).thenReturn(new UserSession(user(10L, "hash", "생성자"), "issued-token"));
+        when(teamRepository.save(any(Team.class))).thenAnswer(invocation -> {
+            Team saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 1L);
+            return saved;
+        });
+        var result = teamService.createTeam(new TeamCreateRequest("새 팀", null), null);
+        assertThat(result.issuedToken()).isEqualTo("issued-token");
+        assertThat(result.team().myRole()).isEqualTo("ADMIN");
+    }
+
+    @Test
+    @DisplayName("최초 가입은 새 세션 토큰과 신규 멤버 결과를 함께 전달한다")
+    void joinTeam_withoutCookie_propagatesIssuedSessionToken() {
+        when(teamRepository.findByInviteToken("invite-token")).thenReturn(Optional.of(team()));
+        when(userService.getOrCreateSession(null)).thenReturn(new UserSession(user(20L, "hash", "멤버"), "issued-token"));
+        when(teamMemberRepository.save(any(TeamMember.class))).thenAnswer(invocation -> {
+            TeamMember saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 2L);
+            return saved;
+        });
+        var result = teamService.joinTeam("invite-token", null);
+        assertThat(result.issuedToken()).isEqualTo("issued-token");
+        assertThat(result.created()).isTrue();
+    }
+
 }

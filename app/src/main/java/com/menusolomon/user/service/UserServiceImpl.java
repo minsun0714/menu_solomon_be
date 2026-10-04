@@ -3,6 +3,7 @@ package com.menusolomon.user.service;
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.user.domain.User;
+import com.menusolomon.user.dto.UserSession;
 import com.menusolomon.user.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -11,11 +12,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.Base64;
+import java.security.SecureRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserServiceImpl implements UserService {
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final Clock clock;
@@ -23,6 +28,19 @@ public class UserServiceImpl implements UserService {
     public UserServiceImpl(UserRepository userRepository, Clock clock) {
         this.userRepository = userRepository;
         this.clock = clock;
+    }
+
+    @Override
+    @Transactional
+    public UserSession getOrCreateSession(String rawSessionToken) {
+        return findBySessionToken(rawSessionToken).map(user -> new UserSession(user, null))
+                .orElseGet(() -> {
+                    byte[] bytes = new byte[32];
+                    RANDOM.nextBytes(bytes);
+                    String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+                    User user = userRepository.save(User.createAnonymous(hash(token), Instant.now(clock)));
+                    return new UserSession(user, token);
+                });
     }
 
     @Override

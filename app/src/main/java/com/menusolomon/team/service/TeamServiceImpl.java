@@ -9,6 +9,7 @@ import com.menusolomon.team.dto.InvitationPreviewResponse;
 import com.menusolomon.team.dto.InvitationUserResponse;
 import com.menusolomon.team.dto.TeamCreateRequest;
 import com.menusolomon.team.dto.TeamCreateResponse;
+import com.menusolomon.team.dto.TeamCreateResult;
 import com.menusolomon.team.dto.TeamDetailResponse;
 import com.menusolomon.team.dto.TeamJoinResponse;
 import com.menusolomon.team.dto.TeamJoinResult;
@@ -47,7 +48,7 @@ public class TeamServiceImpl implements TeamService {
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
             Clock clock,
-            @Value("${app.frontend-base-url:https://menu-solomon.vercel.app}") String frontendBaseUrl
+            @Value("${app.frontend-base-url:https://example.com}") String frontendBaseUrl
     ) {
         this.userService = userService;
         this.userRepository = userRepository;
@@ -60,7 +61,8 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional(readOnly = true)
     public TeamDetailResponse getTeamDetail(Long teamId, String rawSessionToken) {
-        User user = userService.getBySessionToken(rawSessionToken);
+        User user = userService.findBySessionToken(rawSessionToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_NOT_FOUND));
         TeamMember member = teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId())
@@ -73,13 +75,14 @@ public class TeamServiceImpl implements TeamService {
 
     @Override
     @Transactional
-    public TeamCreateResponse createTeam(TeamCreateRequest request, String rawSessionToken) {
-        User creator = userService.getOrCreateBySessionToken(rawSessionToken);
+    public TeamCreateResult createTeam(TeamCreateRequest request, String rawSessionToken) {
+        var session = userService.getOrCreateSession(rawSessionToken);
+        User creator = session.user();
         Instant now = Instant.now(clock);
         Team team = teamRepository.save(Team.create(request.name(), request.description(), newInviteToken(), now));
         teamMemberRepository.save(TeamMember.newAdmin(team.getId(), creator.getId(), now));
-        return new TeamCreateResponse("team_" + team.getId(), team.getName(), team.getDescription(),
-                "ADMIN", frontendBaseUrl + "/invite/" + team.getInviteToken());
+        return new TeamCreateResult(new TeamCreateResponse("team_" + team.getId(), team.getName(), team.getDescription(),
+                "ADMIN", frontendBaseUrl + "/invite/" + team.getInviteToken()), session.issuedToken());
     }
 
     @Override
@@ -102,16 +105,17 @@ public class TeamServiceImpl implements TeamService {
     @Transactional
     public TeamJoinResult joinTeam(String inviteToken, String rawSessionToken) {
         Team team = findInvitationTeam(inviteToken);
-        User user = userService.getOrCreateBySessionToken(rawSessionToken);
+        var session = userService.getOrCreateSession(rawSessionToken);
+        User user = session.user();
         Instant now = Instant.now(clock);
         return teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId())
                 .map(member -> {
                     member.joinIfInactive(now);
-                    return new TeamJoinResult(membership(member), false);
+                    return new TeamJoinResult(membership(member), false, session.issuedToken());
                 })
                 .orElseGet(() -> {
                     TeamMember member = teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), now));
-                    return new TeamJoinResult(membership(member), true);
+                    return new TeamJoinResult(membership(member), true, session.issuedToken());
                 });
     }
 

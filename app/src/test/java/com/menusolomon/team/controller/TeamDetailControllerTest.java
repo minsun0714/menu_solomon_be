@@ -1,7 +1,6 @@
 package com.menusolomon.team.controller;
 
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -81,27 +80,30 @@ class TeamDetailControllerTest {
     }
 
     @Test
-    void getTeam_withoutCookie_returns401ProblemDetail() throws Exception {
+    void getTeam_withoutCookie_returns403ProblemDetail() throws Exception {
+        when(teamService.getTeamDetail(1L, null))
+                .thenThrow(new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
+
         mockMvc.perform(get("/api/teams/1"))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.code").value("SESSION_REQUIRED"))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("NOT_TEAM_MEMBER"))
                 .andExpect(header().doesNotExist("Set-Cookie"));
 
-        verifyNoInteractions(teamService);
+        verify(teamService).getTeamDetail(1L, null);
     }
 
     @Test
-    void getTeam_invalidSession_returns401ProblemDetail() throws Exception {
+    void getTeam_invalidSession_returns403ProblemDetail() throws Exception {
         when(teamService.getTeamDetail(1L, SESSION_TOKEN))
-                .thenThrow(new BusinessException(ErrorCode.SESSION_REQUIRED));
+                .thenThrow(new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
 
         mockMvc.perform(get("/api/teams/1").cookie(sessionCookie()))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.code").value("SESSION_REQUIRED"))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("NOT_TEAM_MEMBER"))
                 .andExpect(header().doesNotExist("Set-Cookie"));
 
         verify(teamService).getTeamDetail(1L, SESSION_TOKEN);
@@ -117,6 +119,27 @@ class TeamDetailControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.code").value("TEAM_NOT_FOUND"));
+    }
+
+    @Test
+    void getTeam_publicTeamId_bindsToNumericRepositoryId() throws Exception {
+        when(teamService.getTeamDetail(1L, SESSION_TOKEN)).thenReturn(detail("ADMIN"));
+
+        mockMvc.perform(get("/api/teams/team_1").cookie(sessionCookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("team_1"));
+
+        verify(teamService).getTeamDetail(1L, SESSION_TOKEN);
+    }
+
+    @Test
+    void getTeam_malformedTeamId_returns400ProblemDetail() throws Exception {
+        mockMvc.perform(get("/api/teams/team_invalid").cookie(sessionCookie()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        org.mockito.Mockito.verifyNoInteractions(teamService);
     }
 
     private Cookie sessionCookie() {
