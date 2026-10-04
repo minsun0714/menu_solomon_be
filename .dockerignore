@@ -1,0 +1,9 @@
+.git
+.idea
+.gradle
+**/build
+.env
+.env.*
+docs
+app/src/test
+mock-kakao/src
