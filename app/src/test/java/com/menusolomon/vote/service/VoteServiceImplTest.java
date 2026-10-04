@@ -59,12 +59,18 @@ class VoteServiceImplTest {
     @Test void createVote_initializesAllActiveParticipantsAndAllowsMultipleOpenSessions() {
         identity(); when(members.findAllByTeamIdAndLeftAtIsNull(1L)).thenReturn(List.of(member));
         when(sessions.save(any())).thenAnswer(invocation -> id(invocation.getArgument(0),5L));
-        var first=service.createVote(1L,"token",DEADLINE); service.createVote(1L,"token",DEADLINE);
+        var first=service.createVote(1L,"token",null,DEADLINE); service.createVote(1L,"token",null,DEADLINE);
         assertThat(first.name()).isNull(); assertThat(first.status()).isEqualTo(VoteStatus.OPEN);
         verify(sessions,times(2)).save(any()); verify(participants,times(2)).saveAll(argThat(rows -> rows.iterator().next().isParticipating()));
     }
+    @Test void createVote_namedRequestPersistsName() {
+        identity(); when(members.findAllByTeamIdAndLeftAtIsNull(1L)).thenReturn(List.of(member));
+        when(sessions.save(any())).thenAnswer(invocation -> id(invocation.getArgument(0),5L));
+        assertThat(service.createVote(1L,"token","asf",DEADLINE).name()).isEqualTo("asf");
+        verify(sessions).save(argThat(vote -> vote.getName().equals("asf")));
+    }
     @Test void createVote_nonMember_isRejectedWithoutSaving() {
-        error(() -> service.createVote(1L,"token",DEADLINE),ErrorCode.NOT_TEAM_MEMBER); verifyNoInteractions(sessions);
+        error(() -> service.createVote(1L,"token",null,DEADLINE),ErrorCode.NOT_TEAM_MEMBER); verifyNoInteractions(sessions);
     }
     @Test void getVotes_usesDistinctVoterCountAndAllMyCandidates() {
         identity(); when(sessions.findSummaries(1L)).thenReturn(List.of(new VoteSummaryRow(5L,1L,null,1L,"익명",VoteStatus.OPEN,DEADLINE,NOW,2,3,1)));

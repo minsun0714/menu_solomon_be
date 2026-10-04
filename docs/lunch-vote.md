@@ -28,7 +28,7 @@
 }
 ```
 
-생성 시 `name=null`. 프론트에서 `점심 투표 #{id}`처럼 표시할 수 있다.
+생성 요청에 이름이 없으면 `name=null`. 프론트에서 `점심 투표 #{id}`처럼 표시할 수 있다.
 
 ### Participant
 
@@ -100,11 +100,20 @@
 모든 ACTIVE 팀원, `201 Created`. 한 팀에 OPEN 투표 여러 개 가능.
 
 ```json
-{ "closesAt": "2026-10-04T07:00:00Z" }
+{ "name": "asf", "closesAt": "2026-10-04T07:00:00Z" }
 ```
 
+`name`은 선택이며 지정하면 blank 불가·최대 40자다. 현재 프론트 요청과 호환되도록
+`title`을 `name`의 별칭으로도 받는다. 두 필드를 동시에 보내지 않는다.
+
+```json
+{ "title": "asf", "closesAt": "2026-10-04T07:00:00Z" }
+```
+
+위 두 요청 모두 응답에는 `name: "asf"`로 반환하고 DB의 `name` 컬럼에 저장한다.
+이름을 생략하거나 null로 보내면 기존처럼 `name=null`이다.
 closesAt 필수·현재 시각 이후. 3시간 기본값은 프론트에서 계산해 전달한다.
-생성 시 ACTIVE 팀원 전체를 participating=true로 초기화한다. 응답 data는 VoteSession이며 name=null.
+생성 시 ACTIVE 팀원 전체를 participating=true로 초기화한다. 응답 data는 VoteSession이며 name은 요청한 이름(미지정 시 null)이다.
 
 ### GET `/votes` — 목록
 
@@ -408,6 +417,11 @@ docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroo
 docker compose up --build -d app
 ```
 
+Hibernate update가 이미 새 테이블과 name 컬럼을 만들었지만 예전 `title NOT NULL`이 남아 있는
+혼합 스키마라면 [혼합 스키마 복구 SQL](migrations/20261004-vote-hybrid-schema-repair.sql)을 사용한다.
+이 SQL은 예전 참여자·후보·선택·확정 테이블이 비어 있을 때만 진행하고, 기존 name 데이터는 유지한다.
+현재 개발 Compose DB에는 백업 후 이 복구 SQL을 적용해 title 컬럼을 제거하고 CLOSED 상태를 허용했다.
+
 빈 DB는 SQL이 필요 없으며 현재 Entity로 생성할 수 있다.
 기존 name/title이 40자를 넘는 행은 SQL 실행 전에 처리해야 한다(무단 문자열 절단을 하지 않음).
 기존 제목·참여·선택·확정 데이터를 새 컬럼/테이블로 옮기며 기존 확정 결과는 MANUAL로 해석한다.
@@ -415,7 +429,7 @@ docker compose up --build -d app
 Hibernate `ddl-auto=update`만으로는 테이블 rename과 기존 2컬럼 ballot 유니크 제거를 처리할 수 없다.
 MySQL DDL은 자동 커밋하므로 이 SQL 전체가 하나의 롤백 가능한 트랜잭션은 아니다.
 
-동시성 테스트는 H2에서 애플리케이션 불변식을 검증한다. MySQL의 실제 잠금 동작과 전환 SQL은 별도 환경에서 검증해야 한다.
+동시성 테스트는 H2에서 애플리케이션 불변식을 검증한다. MySQL의 실제 동시 잠금 동작과 순수 레거시 전환 SQL은 별도 환경에서 검증해야 한다. 혼합 스키마 복구 SQL은 MySQL 8.4 임시 DB와 현재 개발 DB에서 검증했다.
 
 ## 10. 교체된 이전 경로
 
@@ -423,5 +437,5 @@ MySQL DDL은 자동 커밋하므로 이 SQL 전체가 하나의 롤백 가능한
 - `/votes/{voteId}/participants/me` → `/votes/{voteId}/participants/{targetTeamMemberId}`
 - `/votes/{voteId}/confirm` → `/votes/{voteId}/decision`
 - `/votes/history` → `/lunch-history`의 주간/월간 조회
-- create의 title → closesAt 필수, name은 PATCH로 설정
+- 생성은 closesAt 필수·name 선택. title도 생성 요청 별칭으로 허용하며 응답은 항상 name 사용.
 - candidate 요청의 teamRestaurantId → kakaoPlaceId + source

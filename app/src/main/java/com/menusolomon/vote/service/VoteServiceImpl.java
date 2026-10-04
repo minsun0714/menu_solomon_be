@@ -73,10 +73,10 @@ public class VoteServiceImpl implements VoteService {
     }
 
     @Override
-    public VoteSessionResponse createVote(Long teamId, String token, Instant closesAt) {
+    public VoteSessionResponse createVote(Long teamId, String token, String name, Instant closesAt) {
         var member = requireMember(teamId, token);
         Instant now = Instant.now(clock);
-        var vote = sessions.save(LunchVoteSession.create(teamId, member.getId(), closesAt, now));
+        var vote = sessions.save(LunchVoteSession.create(teamId, member.getId(), name, closesAt, now));
         participants.saveAll(members.findAllByTeamIdAndLeftAtIsNull(teamId).stream()
                 .map(active -> VoteParticipant.create(vote.getId(), active.getId(), true, now)).toList());
         return VoteSessionResponse.from(vote);

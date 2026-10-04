@@ -346,7 +346,7 @@ Base path는 `/api/teams/{teamId}`다.
 
 | Method | 경로 | 성공 | 설명 |
 | --- | --- | --- | --- |
-| POST | /votes | 201 | closesAt 필수, name=null로 생성 |
+| POST | /votes | 201 | closesAt 필수·name 선택(title 별칭 지원) |
 | GET | /votes | 200 | 최신순, 마감 정산, 고유 투표자 수·내 선택 전체 |
 | GET | /votes/{voteId} | 200 | session·creatorNickname·decision |
 | PATCH | /votes/{voteId} | 200 | OPEN 이름·종료 시간 부분 수정 |
@@ -366,6 +366,11 @@ Base path는 `/api/teams/{teamId}`다.
 | DELETE | /votes/{voteId}/decision | 204 | 생성자가 확정 삭제·CLOSED 전환 |
 | GET | /lunch-history?view=WEEK&date=2026-10-04 | 200 | 한국 시간, 월요일 시작 |
 | GET | /lunch-history?view=MONTH&month=2026-10 | 200 | 한국 시간, 월간 |
+
+생성 요청은 `{ "name": "asf", "closesAt": "2026-10-04T07:00:00Z" }`이며 name은 선택이다.
+기존 프론트의 `title` 필드도 생성 요청에서 name 별칭으로 받는다. 응답 필드는 항상 name이다.
+name/title을 보내면 blank 불가·최대 40자이며, 생략/null이면 null을 반환한다.
+closesAt은 필수이며 서버 현재 시각보다 이후여야 한다.
 
 상태는 OPEN/CLOSED/CONFIRMED. 스케줄러와 목록·상세·결과 조회에서 마감 정산한다.
 단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED.

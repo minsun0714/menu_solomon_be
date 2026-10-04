@@ -28,8 +28,13 @@ public class LunchVoteSession {
     @Column(name = "closes_at", nullable = false) private Instant closesAt;
     protected LunchVoteSession() {}
     public static LunchVoteSession create(Long teamId, Long creatorId, Instant closesAt, Instant now) {
+        return create(teamId, creatorId, null, closesAt, now);
+    }
+    public static LunchVoteSession create(Long teamId, Long creatorId, String name, Instant closesAt, Instant now) {
         validateTime(closesAt, now);
+        validateName(name);
         var session = new LunchVoteSession();
+        session.name = name;
         session.teamId = teamId; session.createdByTeamMemberId = creatorId;
         session.closesAt = closesAt; session.createdAt = now; session.status = VoteStatus.OPEN;
         return session;
@@ -45,7 +50,7 @@ public class LunchVoteSession {
     public void update(String name, Instant closesAt, Instant now) {
         requireOpen(now);
         if (name == null && closesAt == null) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-        if (name != null && (name.isBlank() || name.length() > 40)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        validateName(name);
         if (closesAt != null) validateTime(closesAt, now);
         if (name != null) this.name = name;
         if (closesAt != null) this.closesAt = closesAt;
@@ -68,6 +73,9 @@ public class LunchVoteSession {
         requireCreator(memberId);
         if (status != VoteStatus.CONFIRMED) throw new BusinessException(ErrorCode.DECISION_NOT_FOUND);
         status = VoteStatus.CLOSED;
+    }
+    private static void validateName(String name) {
+        if (name != null && (name.isBlank() || name.length() > 40)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     private static void validateTime(Instant time, Instant now) {
         if (time == null || !time.isAfter(now)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);

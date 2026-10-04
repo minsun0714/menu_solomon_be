@@ -18,7 +18,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 public interface VoteService {
-    VoteSessionResponse createVote(Long teamId, String token, Instant closesAt);
+    VoteSessionResponse createVote(Long teamId, String token, String name, Instant closesAt);
     List<VoteSummaryResponse> getVotes(Long teamId, String token);
     VoteDetailResponse getVoteDetail(Long teamId, Long voteId, String token);
     VoteSessionResponse updateVote(Long teamId, Long voteId, String token, VoteUpdateRequest request);
