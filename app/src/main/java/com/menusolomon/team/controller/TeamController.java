@@ -4,11 +4,14 @@ import com.menusolomon.common.response.ApiResponse;
 import com.menusolomon.common.web.WebConstants;
 import com.menusolomon.team.dto.TeamCreateRequest;
 import com.menusolomon.team.dto.TeamCreateResponse;
+import com.menusolomon.team.dto.TeamDetailResponse;
 import com.menusolomon.team.service.TeamService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +25,14 @@ public class TeamController {
 
     public TeamController(TeamService teamService) {
         this.teamService = teamService;
+    }
+
+    @GetMapping("/{teamId}")
+    public ApiResponse<TeamDetailResponse> getTeam(
+            @PathVariable Long teamId,
+            @CookieValue(WebConstants.SESSION_COOKIE_NAME) String rawSessionToken
+    ) {
+        return ApiResponse.of(teamService.getTeamDetail(teamId, rawSessionToken));
     }
 
     @PostMapping
