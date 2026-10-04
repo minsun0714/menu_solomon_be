@@ -30,8 +30,9 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addFormatters(FormatterRegistry registry) {
-        // Current numeric path IDs also accept the public team ID returned in API responses.
+        // Numeric path IDs also accept the public IDs returned in API responses.
         registry.addConverter(String.class, Long.class, value ->
-                Long.valueOf(value.startsWith("team_") ? value.substring(5) : value));
+                Long.valueOf(value.startsWith("teamRestaurant_") ? value.substring(15)
+                        : value.startsWith("team_") ? value.substring(5) : value));
     }
 }
