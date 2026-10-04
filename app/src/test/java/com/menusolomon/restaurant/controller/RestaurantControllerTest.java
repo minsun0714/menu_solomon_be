@@ -68,14 +68,17 @@ class RestaurantControllerTest {
     @Test
     void getTeamRestaurants_returns200() throws Exception {
         when(service.getRestaurants(1L, "token", null, null, RestaurantSort.LATEST))
-                .thenReturn(new RestaurantListResponse(List.of(RestaurantDetailResponse.from(row())), 1L, Map.of("양식", 1L)));
+                .thenReturn(new RestaurantListResponse(List.of(RestaurantDetailResponse.from(row())), 1L, 2L, Map.of("양식", 1L)));
         mvc.perform(get("/api/teams/1/restaurants").cookie(cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.restaurants[0].registeredByNickname").value("익명 사용자"))
                 .andExpect(jsonPath("$.data.restaurants[0].createdAt").value(NOW.toString()))
                 .andExpect(jsonPath("$.data.totalCount").value(1))
                 .andExpect(jsonPath("$.data.categoryCounts.양식").value(1))
-                .andExpect(jsonPath("$.data.restaurants[0].averageRating").doesNotExist());
+                .andExpect(jsonPath("$.data.restaurants[0].averageRating").value(4.5))
+                .andExpect(jsonPath("$.data.restaurants[0].reviewCount").value(2))
+                .andExpect(jsonPath("$.data.restaurants[0].latestReview.nickname").value("리뷰 작성자"))
+                .andExpect(jsonPath("$.data.totalReviewCount").value(2));
     }
 
     @Test
@@ -84,6 +87,16 @@ class RestaurantControllerTest {
                         .param("keyword", "강남").param("category", "한식").param("sort", "NAME"))
                 .andExpect(status().isOk());
         verify(service).getRestaurants(1L, "token", "강남", "한식", RestaurantSort.NAME);
+    }
+
+    @Test
+    void getTeamRestaurants_bindsRatingDesc() throws Exception {
+        when(service.getRestaurants(1L, "token", null, null, RestaurantSort.RATING_DESC))
+                .thenReturn(new RestaurantListResponse(List.of(RestaurantDetailResponse.from(row())), 1L, 2L, Map.of("양식", 1L)));
+        mvc.perform(get("/api/teams/1/restaurants").cookie(cookie()).param("sort", "RATING_DESC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.restaurants[0].averageRating").value(4.5));
+        verify(service).getRestaurants(1L, "token", null, null, RestaurantSort.RATING_DESC);
     }
 
     @Test
@@ -99,8 +112,21 @@ class RestaurantControllerTest {
         mvc.perform(get("/api/teams/team_1/restaurants/teamRestaurant_5").cookie(cookie()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("teamRestaurant_5"))
-                .andExpect(jsonPath("$.data.kakaoPlaceUrl").value("https://place.map.kakao.com/123"));
+                .andExpect(jsonPath("$.data.kakaoPlaceUrl").value("https://place.map.kakao.com/123"))
+                .andExpect(jsonPath("$.data.averageRating").value(4.5))
+                .andExpect(jsonPath("$.data.reviewCount").value(2));
         verify(service).getRestaurant(1L, 5L, "token");
+    }
+
+    @Test
+    void getTeamRestaurant_withoutReviews_returnsNullAverageAndLatestReview() throws Exception {
+        when(service.getRestaurant(1L, 5L, "token"))
+                .thenReturn(RestaurantDetailResponse.from(rowWithoutReviews()));
+        mvc.perform(get("/api/teams/1/restaurants/5").cookie(cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageRating").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.reviewCount").value(0))
+                .andExpect(jsonPath("$.data.latestReview").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
