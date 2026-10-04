@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.Getter;
 
 @Entity
@@ -42,5 +43,9 @@ public class User {
 
     public static User create(String anonymousTokenHash, String nickname, Instant now) {
         return new User(anonymousTokenHash, nickname, now);
+    }
+
+    public static User createAnonymous(String anonymousTokenHash, Instant now) {
+        return new User(anonymousTokenHash, "익명 사용자 " + UUID.randomUUID(), now);
     }
 }
