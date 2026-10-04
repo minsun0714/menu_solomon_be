@@ -17,6 +17,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidParameter(Exception exception) {
+        return problem(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getDetail(), null);
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ProblemDetail> handleBusinessException(BusinessException exception) {
         ErrorCode errorCode = exception.getErrorCode();

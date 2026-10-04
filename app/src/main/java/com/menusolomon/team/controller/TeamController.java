@@ -2,6 +2,7 @@ package com.menusolomon.team.controller;
 
 import com.menusolomon.common.response.ApiResponse;
 import com.menusolomon.common.web.WebConstants;
+import com.menusolomon.common.web.SessionCookies;
 import com.menusolomon.team.dto.TeamCreateRequest;
 import com.menusolomon.team.dto.TeamCreateResponse;
 import com.menusolomon.team.dto.TeamDetailResponse;
@@ -30,7 +31,7 @@ public class TeamController {
     @GetMapping("/{teamId}")
     public ApiResponse<TeamDetailResponse> getTeam(
             @PathVariable Long teamId,
-            @CookieValue(WebConstants.SESSION_COOKIE_NAME) String rawSessionToken
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String rawSessionToken
     ) {
         return ApiResponse.of(teamService.getTeamDetail(teamId, rawSessionToken));
     }
@@ -38,9 +39,10 @@ public class TeamController {
     @PostMapping
     public ResponseEntity<ApiResponse<TeamCreateResponse>> createTeam(
             @Valid @RequestBody TeamCreateRequest request,
-            @CookieValue(WebConstants.SESSION_COOKIE_NAME) String rawSessionToken
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String rawSessionToken
     ) {
-        TeamCreateResponse response = teamService.createTeam(request, rawSessionToken);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(response));
+        var result = teamService.createTeam(request, rawSessionToken);
+        return ResponseEntity.status(HttpStatus.CREATED).headers(SessionCookies.headers(result.issuedToken()))
+                .body(ApiResponse.of(result.team()));
     }
 }

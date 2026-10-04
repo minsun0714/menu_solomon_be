@@ -2,6 +2,7 @@ package com.menusolomon.team.controller;
 
 import com.menusolomon.common.response.ApiResponse;
 import com.menusolomon.common.web.WebConstants;
+import com.menusolomon.common.web.SessionCookies;
 import com.menusolomon.team.dto.InvitationPreviewResponse;
 import com.menusolomon.team.dto.TeamJoinResponse;
 import com.menusolomon.team.dto.TeamJoinResult;
@@ -36,10 +37,11 @@ public class InvitationController {
     @PostMapping("/{inviteToken}/join")
     public ResponseEntity<ApiResponse<TeamJoinResponse>> joinTeam(
             @PathVariable String inviteToken,
-            @CookieValue(WebConstants.SESSION_COOKIE_NAME) String rawSessionToken
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String rawSessionToken
     ) {
         TeamJoinResult result = teamService.joinTeam(inviteToken, rawSessionToken);
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
-        return ResponseEntity.status(status).body(ApiResponse.of(result.membership()));
+        return ResponseEntity.status(status).headers(SessionCookies.headers(result.issuedToken()))
+                .body(ApiResponse.of(result.membership()));
     }
 }

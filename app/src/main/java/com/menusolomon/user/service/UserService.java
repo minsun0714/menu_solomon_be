@@ -2,8 +2,12 @@ package com.menusolomon.user.service;
 
 import com.menusolomon.user.domain.User;
 import java.util.Optional;
+import com.menusolomon.user.dto.UserSession;
 
 public interface UserService {
+
+    /** Reuses a stored identity or issues a server-generated token and creates its user. */
+    UserSession getOrCreateSession(String rawSessionToken);
 
     User getOrCreateBySessionToken(String rawSessionToken);
 

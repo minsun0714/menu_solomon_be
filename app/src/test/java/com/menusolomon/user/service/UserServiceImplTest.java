@@ -140,4 +140,42 @@ class UserServiceImplTest {
         assertThat(first.getAnonymousTokenHash()).isNotEqualTo(second.getAnonymousTokenHash());
         assertThat(first.getNickname()).isNotEqualTo(second.getNickname());
     }
+
+    @Test
+    @DisplayName("쿠키 없는 최초 요청은 서버 난수 토큰을 발급하고 그 해시만 저장한다")
+    void getOrCreateSession_withoutCookie_issuesServerToken() throws Exception {
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var session = userService.getOrCreateSession(null);
+
+        assertThat(session.issuedToken()).hasSizeGreaterThanOrEqualTo(32);
+        String expectedHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(session.issuedToken().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertThat(session.user().getAnonymousTokenHash()).isEqualTo(expectedHash);
+        verify(userRepository).save(session.user());
+    }
+
+    @Test
+    @DisplayName("유효한 기존 쿠키는 같은 사용자를 반환하며 새 토큰을 발급하지 않는다")
+    void getOrCreateSession_existingCookie_preservesIdentity() {
+        User existing = user(1L, TOKEN_HASH, "익명 사용자 1234");
+        when(userRepository.findByAnonymousTokenHash(TOKEN_HASH)).thenReturn(Optional.of(existing));
+
+        var session = userService.getOrCreateSession("test");
+
+        assertThat(session.user()).isSameAs(existing);
+        assertThat(session.issuedToken()).isNull();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("알 수 없는 클라이언트 토큰은 그대로 저장하지 않고 서버 토큰으로 교체한다")
+    void getOrCreateSession_unknownCookie_rotatesToken() {
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var session = userService.getOrCreateSession("test");
+
+        assertThat(session.issuedToken()).isNotEqualTo("test").hasSizeGreaterThanOrEqualTo(32);
+        assertThat(session.user().getAnonymousTokenHash()).isNotEqualTo(TOKEN_HASH);
+    }
 }
