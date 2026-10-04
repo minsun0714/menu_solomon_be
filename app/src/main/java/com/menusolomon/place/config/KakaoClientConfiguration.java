@@ -13,7 +13,7 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class KakaoClientConfiguration {
     @Bean
-    public PlaceSearchClient placeSearchClient(@Value("${kakao.rest-api-key:}") String key) {
+    public PlaceSearchClient placeSearchClient(@Value("${kakao.rest-api-key}") String key) {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(5));

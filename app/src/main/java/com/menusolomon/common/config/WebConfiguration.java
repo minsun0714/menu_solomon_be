@@ -13,7 +13,7 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     private final List<String> allowedOrigins;
 
-    public WebConfiguration(@Value("${app.cors.allowed-origins:https://example.com}") String allowedOrigins) {
+    public WebConfiguration(@Value("${app.cors.allowed-origins}") String allowedOrigins) {
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(",")).map(String::trim)
                 .filter(origin -> !origin.isEmpty()).toList();
         if (this.allowedOrigins.isEmpty() || this.allowedOrigins.stream().anyMatch(origin -> origin.contains("*"))) {
