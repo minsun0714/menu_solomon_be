@@ -78,4 +78,10 @@ public class TeamMember {
         leftAt = null;
         role = TeamRole.MEMBER;
     }
+
+    public void joinIfInactive(Instant now) {
+        if (!isActive()) {
+            rejoin(now);
+        }
+    }
 }

@@ -91,4 +91,26 @@ class TeamMemberTest {
         member.leave(LEFT_AT);
         return member;
     }
+
+    @Test
+    void joinIfInactive_activeAdmin_preservesRoleAndJoinedAt() {
+        TeamMember admin = TeamMember.newAdmin(1L, 2L, JOINED_AT);
+
+        admin.joinIfInactive(REJOINED_AT);
+
+        assertThat(admin.getRole()).isEqualTo(TeamRole.ADMIN);
+        assertThat(admin.getJoinedAt()).isEqualTo(JOINED_AT);
+    }
+
+    @Test
+    void joinIfInactive_inactiveMember_rejoinsAsMember() {
+        TeamMember formerAdmin = TeamMember.newAdmin(1L, 2L, JOINED_AT);
+        formerAdmin.leave(LEFT_AT);
+
+        formerAdmin.joinIfInactive(REJOINED_AT);
+
+        assertThat(formerAdmin.isActive()).isTrue();
+        assertThat(formerAdmin.getRole()).isEqualTo(TeamRole.MEMBER);
+        assertThat(formerAdmin.getJoinedAt()).isEqualTo(REJOINED_AT);
+    }
 }
