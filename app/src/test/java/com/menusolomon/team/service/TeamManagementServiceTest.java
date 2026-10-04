@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.menusolomon.vote.service.VoteService;
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.restaurant.repository.TeamRestaurantRepository;
@@ -31,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class TeamManagementServiceTest {
+    @Mock VoteService voteService;
     @Mock UserService users;
     @Mock UserRepository userRepository;
     @Mock TeamRepository teams;
@@ -41,7 +43,7 @@ class TeamManagementServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TeamServiceImpl(users, userRepository, teams, members, reviews, restaurants,
+        service = new TeamServiceImpl(users, userRepository, teams, members, reviews, restaurants, voteService,
                 Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC), "https://frontend.example/");
     }
 
@@ -144,7 +146,8 @@ class TeamManagementServiceTest {
         var team = team();
         when(teams.findById(1L)).thenReturn(Optional.of(team));
         service.leaveTeam(1L, "token");
-        var order = inOrder(reviews, restaurants, members, teams);
+        var order = inOrder(voteService, reviews, restaurants, members, teams);
+        order.verify(voteService).deleteTeamData(1L);
         order.verify(reviews).deleteAllByTeamId(1L);
         order.verify(restaurants).deleteAllByTeamId(1L);
         order.verify(members).deleteAllByTeamId(1L);

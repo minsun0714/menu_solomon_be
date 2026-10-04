@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.menusolomon.vote.service.VoteService;
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.review.repository.ReviewRepository;
 import com.menusolomon.restaurant.repository.TeamRestaurantRepository;
@@ -48,6 +49,7 @@ class TeamServiceImplTest {
 
     @Mock private ReviewRepository reviewRepository;
     @Mock private TeamRestaurantRepository teamRestaurantRepository;
+    @Mock VoteService voteService;
     @Mock private UserService userService;
     @Mock private UserRepository userRepository;
     @Mock private TeamRepository teamRepository;
@@ -58,7 +60,7 @@ class TeamServiceImplTest {
     @BeforeEach
     void setUp() {
         teamService = new TeamServiceImpl(userService, userRepository, teamRepository,
-                teamMemberRepository, reviewRepository, teamRestaurantRepository, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC), FRONTEND + "/");
+                teamMemberRepository, reviewRepository, teamRestaurantRepository, voteService, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC), FRONTEND + "/");
     }
 
     @Test
