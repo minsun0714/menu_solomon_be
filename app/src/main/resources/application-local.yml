@@ -1,0 +1,4 @@
+app:
+  frontend-base-url: http://localhost:5173
+  cors:
+    allowed-origins: http://localhost:5173

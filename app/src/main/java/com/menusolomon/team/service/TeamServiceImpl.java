@@ -63,7 +63,7 @@ public class TeamServiceImpl implements TeamService {
             TeamRestaurantRepository teamRestaurantRepository,
             VoteService voteService,
             Clock clock,
-            @Value("${app.frontend-base-url:https://example.com}") String frontendBaseUrl
+            @Value("${app.frontend-base-url}") String frontendBaseUrl
     ) {
         this.userService = userService;
         this.userRepository = userRepository;
