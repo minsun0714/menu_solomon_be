@@ -4,4 +4,4 @@ import java.util.List;
 import java.util.Map;
 
 public record RestaurantListResponse(List<RestaurantDetailResponse> restaurants, long totalCount,
-        Map<String, Long> categoryCounts) {}
+        long totalReviewCount, Map<String, Long> categoryCounts) {}

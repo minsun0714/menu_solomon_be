@@ -10,6 +10,7 @@ import com.menusolomon.restaurant.dto.RestaurantRegisterResponse;
 import com.menusolomon.restaurant.dto.RestaurantSort;
 import com.menusolomon.restaurant.repository.RestaurantRepository;
 import com.menusolomon.restaurant.repository.TeamRestaurantRepository;
+import com.menusolomon.review.repository.ReviewRepository;
 import com.menusolomon.team.domain.TeamMember;
 import com.menusolomon.team.repository.TeamMemberRepository;
 import com.menusolomon.user.service.UserService;
@@ -29,14 +30,16 @@ public class RestaurantServiceImpl implements RestaurantService {
     private final TeamMemberRepository members;
     private final UserService users;
     private final Clock clock;
+    private final ReviewRepository reviews;
 
     public RestaurantServiceImpl(RestaurantRepository restaurants, TeamRestaurantRepository teamRestaurants,
-            TeamMemberRepository members, UserService users, Clock clock) {
+            TeamMemberRepository members, UserService users, Clock clock, ReviewRepository reviews) {
         this.restaurants = restaurants;
         this.teamRestaurants = teamRestaurants;
         this.members = members;
         this.users = users;
         this.clock = clock;
+        this.reviews = reviews;
     }
 
     @Override
@@ -62,17 +65,16 @@ public class RestaurantServiceImpl implements RestaurantService {
     public RestaurantListResponse getRestaurants(Long teamId, String rawSessionToken, String keyword,
             String category, RestaurantSort sort) {
         requireActiveMember(teamId, rawSessionToken);
-        if (sort == RestaurantSort.RATING_DESC) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-        }
         Sort order = sort == RestaurantSort.NAME ? Sort.by("r.name").and(Sort.by("tr.id"))
                 : Sort.by(Sort.Direction.DESC, "tr.createdAt", "tr.id");
-        var items = teamRestaurants.findList(teamId, normalized(keyword), normalized(category), order)
-                .stream().map(RestaurantDetailResponse::from).toList();
+        var rows = sort == RestaurantSort.RATING_DESC
+                ? teamRestaurants.findListByRating(teamId, normalized(keyword), normalized(category))
+                : teamRestaurants.findList(teamId, normalized(keyword), normalized(category), order);
+        var items = rows.stream().map(RestaurantDetailResponse::from).toList();
         Map<String, Long> categoryCounts = new LinkedHashMap<>();
         teamRestaurants.countCategories(teamId).forEach(count -> categoryCounts.put(count.category(), count.count()));
         long totalCount = categoryCounts.values().stream().mapToLong(Long::longValue).sum();
-        return new RestaurantListResponse(items, totalCount, categoryCounts);
+        return new RestaurantListResponse(items, totalCount, reviews.countByTeamId(teamId), categoryCounts);
     }
 
     @Override
@@ -87,8 +89,9 @@ public class RestaurantServiceImpl implements RestaurantService {
     @Transactional
     public void deleteRestaurant(Long teamId, Long teamRestaurantId, String rawSessionToken) {
         requireActiveMember(teamId, rawSessionToken);
-        TeamRestaurant link = teamRestaurants.findByIdAndTeamId(teamRestaurantId, teamId)
+        TeamRestaurant link = teamRestaurants.findByIdAndTeamIdForUpdate(teamRestaurantId, teamId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_RESTAURANT_NOT_FOUND));
+        reviews.deleteByTeamRestaurantId(teamRestaurantId);
         teamRestaurants.delete(link);
     }
 

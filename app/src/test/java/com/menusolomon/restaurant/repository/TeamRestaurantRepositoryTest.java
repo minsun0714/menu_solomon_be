@@ -1,5 +1,8 @@
 package com.menusolomon.restaurant.repository;
 
+import com.menusolomon.review.domain.Review;
+import com.menusolomon.review.repository.ReviewRepository;
+
 import static com.menusolomon.restaurant.fixture.RestaurantFixture.*;
 import static org.assertj.core.api.Assertions.*;
 
@@ -23,12 +26,16 @@ class TeamRestaurantRepositoryTest {
     @Autowired RestaurantRepository restaurants;
     @Autowired TeamMemberRepository members;
     @Autowired UserRepository users;
+    @Autowired ReviewRepository reviews;
+    Long secondMemberId;
     Long memberId;
 
     @BeforeEach
     void setUp() {
         var user = users.save(User.create("hash", "등록자", NOW));
         memberId = members.save(TeamMember.newAdmin(1L, user.getId(), NOW)).getId();
+        var secondUser = users.save(User.create("second-hash", "두 번째 작성자", NOW));
+        secondMemberId = members.save(TeamMember.newMember(1L, secondUser.getId(), NOW)).getId();
     }
 
     @Test
@@ -101,6 +108,101 @@ class TeamRestaurantRepositoryTest {
         save("456", "가식당", "양식", 1L, 60);
         assertThat(links.findList(1L, null, null, Sort.by("r.name").and(Sort.by("tr.id"))))
                 .extracting(TeamRestaurantRow::kakaoPlaceId).containsExactly("456", "123");
+    }
+
+    @Test
+    void averageRating_reviewCount_andLatestReview_areCalculatedForListAndDetail() {
+        var link = save("123", "가식당", "한식", 1L, 0);
+        var first = reviews.save(Review.create(link.getId(), memberId, 5, "처음 작성", NOW));
+        reviews.save(Review.create(link.getId(), secondMemberId, 4, "다음 작성", NOW.plusSeconds(10)));
+        first.update(3, "최신 수정", NOW.plusSeconds(60));
+        reviews.flush();
+        var rows = links.findList(1L, null, null, Sort.by("tr.id"));
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row.averageRating()).isEqualTo(3.5);
+            assertThat(row.reviewCount()).isEqualTo(2);
+            assertThat(row.latestNickname()).isEqualTo("등록자");
+            assertThat(row.latestContent()).isEqualTo("최신 수정");
+            assertThat(row.latestUpdatedAt()).isEqualTo(NOW.plusSeconds(60));
+        });
+        assertThat(links.findDetail(link.getId(), 1L)).contains(rows.getFirst());
+    }
+
+    @Test
+    void restaurantWithoutReviews_isIncludedWithNullAverageAndZeroCount() {
+        var link = save("123", "가식당", "한식", 1L, 0);
+        assertThat(links.findList(1L, null, null, Sort.by("tr.id"))).singleElement().satisfies(row -> {
+            assertThat(row.averageRating()).isNull();
+            assertThat(row.reviewCount()).isZero();
+            assertThat(row.latestContent()).isNull();
+            assertThat(row.latestUpdatedAt()).isNull();
+        });
+        assertThat(links.findDetail(link.getId(), 1L)).isPresent();
+    }
+
+    @Test
+    void latestReview_equalUpdatedAt_usesHighestReviewIdWithoutDuplicatingRestaurant() {
+        var link = save("123", "가식당", "한식", 1L, 0);
+        reviews.save(Review.create(link.getId(), memberId, 5, "첫 리뷰", NOW));
+        reviews.saveAndFlush(Review.create(link.getId(), secondMemberId, 4, "다음 리뷰", NOW));
+        assertThat(links.findList(1L, null, null, Sort.by("tr.id"))).singleElement().satisfies(row -> {
+            assertThat(row.reviewCount()).isEqualTo(2);
+            assertThat(row.latestNickname()).isEqualTo("두 번째 작성자");
+            assertThat(row.latestContent()).isEqualTo("다음 리뷰");
+        });
+    }
+
+    @Test
+    void ratingDesc_ordersHigherAverageFirst_withStableTiesAndUnratedLast() {
+        var lower = save("low", "가식당", "한식", 1L, 0);
+        var higher = save("high", "나식당", "양식", 1L, 0);
+        var sameNewer = save("equal", "다식당", "양식", 1L, 60);
+        save("none", "라식당", "양식", 1L, 120);
+        var other = save("other", "다른 팀", "한식", 2L, 0);
+        reviews.save(Review.create(lower.getId(), memberId, 4, "리뷰", NOW));
+        for (var link : java.util.List.of(higher, sameNewer)) {
+            reviews.save(Review.create(link.getId(), memberId, 5, "좋아요", NOW));
+            reviews.save(Review.create(link.getId(), secondMemberId, 4, "괜찮아요", NOW));
+        }
+        reviews.saveAndFlush(Review.create(other.getId(), memberId, 5, "다른 팀", NOW));
+        assertThat(links.findListByRating(1L, null, null)).extracting(TeamRestaurantRow::kakaoPlaceId)
+                .containsExactly("equal", "high", "low", "none");
+        assertThat(links.findListByRating(1L, "나식당", "양식"))
+                .extracting(TeamRestaurantRow::kakaoPlaceId).containsExactly("high");
+    }
+
+    @Test
+    void totalReviewCount_countsAllReviewsForOnlyRequestedTeam() {
+        var first = save("first", "가식당", "한식", 1L, 0);
+        var second = save("second", "나식당", "양식", 1L, 0);
+        var other = save("other", "다른 팀", "한식", 2L, 0);
+        reviews.save(Review.create(first.getId(), memberId, 5, "리뷰", NOW));
+        reviews.save(Review.create(second.getId(), memberId, 4, "리뷰", NOW));
+        reviews.save(Review.create(second.getId(), secondMemberId, 3, "리뷰", NOW));
+        reviews.saveAndFlush(Review.create(other.getId(), memberId, 5, "리뷰", NOW));
+        assertThat(reviews.countByTeamId(1L)).isEqualTo(3);
+        assertThat(reviews.countByTeamId(2L)).isEqualTo(1);
+        assertThat(reviews.countByTeamId(3L)).isZero();
+    }
+
+    @Test
+    void deletingReview_recalculatesRatingAndLatestReviewWithoutCachedCounters() {
+        var link = save("123", "가식당", "한식", 1L, 0);
+        var review = reviews.saveAndFlush(Review.create(link.getId(), memberId, 5, "리뷰", NOW));
+        assertThat(links.findDetail(link.getId(), 1L).orElseThrow().averageRating()).isEqualTo(5.0);
+        reviews.delete(review);
+        reviews.flush();
+        var row = links.findDetail(link.getId(), 1L).orElseThrow();
+        assertThat(row.reviewCount()).isZero();
+        assertThat(row.averageRating()).isNull();
+        assertThat(row.latestContent()).isNull();
+    }
+
+    @Test
+    void findByIdAndTeamIdForUpdate_keepsTeamScope() {
+        var link = save("123", "가식당", "한식", 1L, 0);
+        assertThat(links.findByIdAndTeamIdForUpdate(link.getId(), 1L)).contains(link);
+        assertThat(links.findByIdAndTeamIdForUpdate(link.getId(), 2L)).isEmpty();
     }
 
     private TeamRestaurant save(String placeId, String name, String category, Long teamId, long offset) {

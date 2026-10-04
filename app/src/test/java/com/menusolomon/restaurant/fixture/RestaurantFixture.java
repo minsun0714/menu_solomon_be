@@ -28,9 +28,16 @@ public final class RestaurantFixture {
         return link;
     }
 
+    public static TeamRestaurantRow rowWithoutReviews() {
+        var row = row();
+        return new TeamRestaurantRow(row.id(), row.restaurantId(), row.kakaoPlaceId(), row.name(),
+                row.address(), row.latitude(), row.longitude(), row.category(), row.kakaoPlaceUrl(),
+                row.registeredByNickname(), row.createdAt(), null, 0L, null, null, null, null);
+    }
+
     public static TeamRestaurantRow row() {
         return new TeamRestaurantRow(5L, 3L, "123", "을지다락", "서울 강남구",
                 new BigDecimal("37.5"), new BigDecimal("127.0"), "양식",
-                "https://place.map.kakao.com/123", "익명 사용자", NOW);
+                "https://place.map.kakao.com/123", "익명 사용자", NOW, 4.5, 2L, "리뷰 작성자", 5, "맛있어요", NOW);
     }
 }

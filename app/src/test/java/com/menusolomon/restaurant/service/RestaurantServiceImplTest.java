@@ -1,5 +1,7 @@
 package com.menusolomon.restaurant.service;
 
+import com.menusolomon.review.repository.ReviewRepository;
+
 import static com.menusolomon.restaurant.fixture.RestaurantFixture.*;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -31,11 +33,12 @@ class RestaurantServiceImplTest {
     @Mock TeamRestaurantRepository links;
     @Mock TeamMemberRepository members;
     @Mock UserService users;
+    @Mock ReviewRepository reviews;
     RestaurantServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new RestaurantServiceImpl(restaurants, links, members, users, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new RestaurantServiceImpl(restaurants, links, members, users, Clock.fixed(NOW, ZoneOffset.UTC), reviews);
     }
 
     private void activeMember() {
@@ -106,10 +109,14 @@ class RestaurantServiceImplTest {
     void getRestaurants_activeMember_returnsListAndTeamWideCounts() {
         activeMember();
         when(links.findList(eq(1L), isNull(), isNull(), any())).thenReturn(List.of(row()));
+        when(reviews.countByTeamId(1L)).thenReturn(7L);
         when(links.countCategories(1L)).thenReturn(List.of(new CategoryCount("양식", 2L), new CategoryCount("한식", 1L)));
         var response = service.getRestaurants(1L, "token", null, null, RestaurantSort.LATEST);
         assertThat(response.restaurants()).singleElement().extracting("id").isEqualTo("teamRestaurant_5");
         assertThat(response.totalCount()).isEqualTo(3);
+        assertThat(response.totalReviewCount()).isEqualTo(7);
+        assertThat(response.restaurants().getFirst().reviewCount()).isEqualTo(2);
+        assertThat(response.restaurants().getFirst().latestReview().nickname()).isEqualTo("리뷰 작성자");
         assertThat(response.categoryCounts()).containsEntry("양식", 2L);
     }
 
@@ -121,10 +128,13 @@ class RestaurantServiceImplTest {
     }
 
     @Test
-    void getRestaurants_ratingSort_isExplicitlyUnsupportedUntilReviewsExist() {
+    void getRestaurants_ratingSort_queriesDatabaseRatings() {
         activeMember();
-        assertError(() -> service.getRestaurants(1L, "token", null, null, RestaurantSort.RATING_DESC), ErrorCode.VALIDATION_ERROR);
-        verifyNoInteractions(links);
+        when(links.findListByRating(1L, null, null)).thenReturn(List.of(row()));
+        var response = service.getRestaurants(1L, "token", null, null, RestaurantSort.RATING_DESC);
+        assertThat(response.restaurants().getFirst().averageRating()).isEqualTo(4.5);
+        verify(links).findListByRating(1L, null, null);
+        verify(links, never()).findList(any(), any(), any(), any());
     }
 
     @Test
@@ -139,6 +149,8 @@ class RestaurantServiceImplTest {
         var response = service.getRestaurant(1L, 5L, "token");
         assertThat(response.name()).isEqualTo("을지다락");
         assertThat(response.registeredByNickname()).isEqualTo("익명 사용자");
+        assertThat(response.averageRating()).isEqualTo(4.5);
+        assertThat(response.reviewCount()).isEqualTo(2);
     }
 
     @Test
@@ -165,9 +177,11 @@ class RestaurantServiceImplTest {
     void deleteRestaurant_activeMember_deletesOnlyTeamRestaurant() {
         activeMember();
         var link = savedLink();
-        when(links.findByIdAndTeamId(5L, 1L)).thenReturn(Optional.of(link));
+        when(links.findByIdAndTeamIdForUpdate(5L, 1L)).thenReturn(Optional.of(link));
         service.deleteRestaurant(1L, 5L, "token");
-        verify(links).delete(link);
+        var order = inOrder(reviews, links);
+        order.verify(reviews).deleteByTeamRestaurantId(5L);
+        order.verify(links).delete(link);
         verifyNoInteractions(restaurants);
     }
 

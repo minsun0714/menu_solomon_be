@@ -8,6 +8,6 @@
 
 `POST /api/teams/{teamId}/restaurants` 요청은 `{ "kakaoPlaceId": "검색 결과의 ID" }` 형식을 유지한다. 팀 식당의 등록·조회·삭제는 기존 세션의 ACTIVE 팀원만 가능하다. 팀 식당을 삭제해도 원본 Restaurant는 남는다.
 
-목록의 totalCount와 categoryCounts는 검색·카테고리 필터 적용 전 팀 전체 식당을 기준으로 반환한다. 검색과 정렬은 DB에서 수행한다. RATING_DESC는 리뷰 구현 전까지 400 VALIDATION_ERROR로 처리한다.
+목록의 totalCount와 categoryCounts는 검색·카테고리 필터 적용 전 팀 전체 식당을 기준으로 반환한다. 검색과 정렬은 DB에서 수행한다. RATING_DESC는 리뷰의 평균 별점 내림차순이며 리뷰가 없는 식당은 뒤에 배치한다. 동점은 최근 등록 시각, 팀 식당 ID 내림차순으로 정렬한다.
 
 REST API 키가 비어 있거나 카카오 호출·응답 처리가 실패하면 502 KAKAO_API_ERROR ProblemDetail을 반환한다. 테스트는 실제 키나 외부 네트워크 없이 MockRestServiceServer로 HTTP 요청과 응답을 검증한다.
