@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.menusolomon.common.exception.BusinessException;
+import com.menusolomon.review.repository.ReviewRepository;
+import com.menusolomon.restaurant.repository.TeamRestaurantRepository;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.team.domain.Team;
 import com.menusolomon.team.domain.TeamMember;
@@ -44,6 +46,8 @@ class TeamServiceImplTest {
     private static final String TOKEN = "opaque-session-token";
     private static final String FRONTEND = "https://menu-solomon.vercel.app";
 
+    @Mock private ReviewRepository reviewRepository;
+    @Mock private TeamRestaurantRepository teamRestaurantRepository;
     @Mock private UserService userService;
     @Mock private UserRepository userRepository;
     @Mock private TeamRepository teamRepository;
@@ -54,7 +58,7 @@ class TeamServiceImplTest {
     @BeforeEach
     void setUp() {
         teamService = new TeamServiceImpl(userService, userRepository, teamRepository,
-                teamMemberRepository, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC), FRONTEND + "/");
+                teamMemberRepository, reviewRepository, teamRestaurantRepository, Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC), FRONTEND + "/");
     }
 
     @Test

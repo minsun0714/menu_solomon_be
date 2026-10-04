@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -67,4 +68,8 @@ public interface TeamRestaurantRepository extends JpaRepository<TeamRestaurant, 
             where tr.teamId = :teamId group by r.category order by r.category
             """)
     List<CategoryCount> countCategories(@Param("teamId") Long teamId);
+    @Modifying
+    @Query("delete from TeamRestaurant restaurant where restaurant.teamId = :teamId")
+    void deleteAllByTeamId(@Param("teamId") Long teamId);
+
 }
