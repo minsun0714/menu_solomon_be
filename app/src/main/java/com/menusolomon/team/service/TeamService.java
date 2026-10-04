@@ -1,5 +1,11 @@
 package com.menusolomon.team.service;
 
+import com.menusolomon.team.dto.TeamUpdateRequest;
+import com.menusolomon.team.dto.TeamUpdateResponse;
+import com.menusolomon.team.dto.InvitationResponse;
+import com.menusolomon.team.dto.AdminTransferResponse;
+import com.menusolomon.team.dto.OfficeLocationRequest;
+import com.menusolomon.team.dto.OfficeLocationResponse;
 import com.menusolomon.team.dto.InvitationPreviewResponse;
 import com.menusolomon.team.dto.TeamCreateRequest;
 import com.menusolomon.team.dto.TeamCreateResult;
@@ -21,4 +27,12 @@ public interface TeamService {
     InvitationPreviewResponse getInvitationPreview(String inviteToken, String rawSessionToken);
 
     TeamJoinResult joinTeam(String inviteToken, String rawSessionToken);
+    TeamUpdateResponse updateTeam(Long teamId, String rawSessionToken, TeamUpdateRequest request);
+    InvitationResponse getInvitation(Long teamId, String rawSessionToken);
+    InvitationResponse regenerateInvitation(Long teamId, String rawSessionToken);
+    AdminTransferResponse transferAdmin(Long teamId, String rawSessionToken, Long targetTeamMemberId);
+    void leaveTeam(Long teamId, String rawSessionToken);
+    OfficeLocationResponse getOfficeLocation(Long teamId, String rawSessionToken);
+    OfficeLocationResponse updateOfficeLocation(Long teamId, String rawSessionToken, OfficeLocationRequest request);
+
 }

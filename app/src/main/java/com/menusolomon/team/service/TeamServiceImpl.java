@@ -4,6 +4,14 @@ import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.team.domain.Team;
 import com.menusolomon.team.domain.TeamMember;
+import com.menusolomon.team.dto.TeamUpdateRequest;
+import com.menusolomon.team.dto.TeamUpdateResponse;
+import com.menusolomon.team.dto.InvitationResponse;
+import com.menusolomon.team.dto.AdminTransferResponse;
+import com.menusolomon.team.dto.OfficeLocationRequest;
+import com.menusolomon.team.dto.OfficeLocationResponse;
+import com.menusolomon.review.repository.ReviewRepository;
+import com.menusolomon.restaurant.repository.TeamRestaurantRepository;
 import com.menusolomon.team.dto.InvitationMemberResponse;
 import com.menusolomon.team.dto.InvitationPreviewResponse;
 import com.menusolomon.team.dto.InvitationUserResponse;
@@ -39,6 +47,8 @@ public class TeamServiceImpl implements TeamService {
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final ReviewRepository reviewRepository;
+    private final TeamRestaurantRepository teamRestaurantRepository;
     private final Clock clock;
     private final String frontendBaseUrl;
 
@@ -47,6 +57,8 @@ public class TeamServiceImpl implements TeamService {
             UserRepository userRepository,
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
+            ReviewRepository reviewRepository,
+            TeamRestaurantRepository teamRestaurantRepository,
             Clock clock,
             @Value("${app.frontend-base-url:https://example.com}") String frontendBaseUrl
     ) {
@@ -54,6 +66,8 @@ public class TeamServiceImpl implements TeamService {
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
+        this.reviewRepository = reviewRepository;
+        this.teamRestaurantRepository = teamRestaurantRepository;
         this.clock = clock;
         this.frontendBaseUrl = frontendBaseUrl.replaceAll("/+$", "");
     }
@@ -117,6 +131,92 @@ public class TeamServiceImpl implements TeamService {
                     TeamMember member = teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), now));
                     return new TeamJoinResult(membership(member), true, session.issuedToken());
                 });
+    }
+
+    @Override
+    @Transactional
+    public TeamUpdateResponse updateTeam(Long teamId, String rawSessionToken, TeamUpdateRequest request) {
+        requireActiveMember(teamId, rawSessionToken).requireAdmin();
+        Team team = requireTeam(teamId);
+        team.changeInfo(request.name(), request.description(), Instant.now(clock));
+        return TeamUpdateResponse.from(team);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InvitationResponse getInvitation(Long teamId, String rawSessionToken) {
+        requireActiveMember(teamId, rawSessionToken).requireAdmin();
+        return invitation(requireTeam(teamId));
+    }
+
+    @Override
+    @Transactional
+    public InvitationResponse regenerateInvitation(Long teamId, String rawSessionToken) {
+        requireActiveMember(teamId, rawSessionToken).requireAdmin();
+        Team team = requireTeam(teamId);
+        team.changeInviteToken(newInviteToken(), Instant.now(clock));
+        return invitation(team);
+    }
+
+    @Override
+    @Transactional
+    public AdminTransferResponse transferAdmin(Long teamId, String rawSessionToken, Long targetTeamMemberId) {
+        TeamMember current = requireActiveMember(teamId, rawSessionToken);
+        current.requireAdmin();
+        TeamMember target = teamMemberRepository.findByIdAndTeamId(targetTeamMemberId, teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+        current.transferAdminTo(target);
+        return new AdminTransferResponse("member_" + target.getId());
+    }
+
+    @Override
+    @Transactional
+    public void leaveTeam(Long teamId, String rawSessionToken) {
+        TeamMember member = requireActiveMember(teamId, rawSessionToken);
+        long activeCount = teamMemberRepository.countByTeamIdAndLeftAtIsNull(teamId);
+        if (member.shouldDeleteTeamOnLeave(activeCount)) {
+            Team team = requireTeam(teamId);
+            reviewRepository.deleteAllByTeamId(teamId);
+            teamRestaurantRepository.deleteAllByTeamId(teamId);
+            teamMemberRepository.deleteAllByTeamId(teamId);
+            teamRepository.delete(team);
+        } else {
+            member.leave(Instant.now(clock));
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OfficeLocationResponse getOfficeLocation(Long teamId, String rawSessionToken) {
+        requireActiveMember(teamId, rawSessionToken);
+        return OfficeLocationResponse.from(requireTeam(teamId));
+    }
+
+    @Override
+    @Transactional
+    public OfficeLocationResponse updateOfficeLocation(Long teamId, String rawSessionToken, OfficeLocationRequest request) {
+        requireActiveMember(teamId, rawSessionToken);
+        Team team = requireTeam(teamId);
+        team.changeOfficeLocation(request.kakaoPlaceId(), request.name(), request.address(),
+                request.latitude(), request.longitude(), Instant.now(clock));
+        return OfficeLocationResponse.from(team);
+    }
+
+    private TeamMember requireActiveMember(Long teamId, String rawSessionToken) {
+        User user = userService.findBySessionToken(rawSessionToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
+        return teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId())
+                .filter(TeamMember::isActive)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_TEAM_MEMBER));
+    }
+
+    private Team requireTeam(Long teamId) {
+        return teamRepository.findById(teamId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_NOT_FOUND));
+    }
+
+    private InvitationResponse invitation(Team team) {
+        return new InvitationResponse(frontendBaseUrl + "/invite/" + team.getInviteToken());
     }
 
     private Team findInvitationTeam(String inviteToken) {

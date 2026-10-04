@@ -1,5 +1,7 @@
 package com.menusolomon.team.domain;
 
+import com.menusolomon.common.exception.BusinessException;
+import com.menusolomon.common.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -84,4 +86,45 @@ public class TeamMember {
             rejoin(now);
         }
     }
+    public void requireAdmin() {
+        requireActive();
+        if (!isAdmin()) {
+            throw new BusinessException(ErrorCode.ADMIN_REQUIRED);
+        }
+    }
+
+    public void promoteToAdmin() {
+        requireActive();
+        role = TeamRole.ADMIN;
+    }
+
+    public void demoteToMember() {
+        requireAdmin();
+        role = TeamRole.MEMBER;
+    }
+
+    public void transferAdminTo(TeamMember target) {
+        requireAdmin();
+        if (!teamId.equals(target.teamId) || !target.isActive() || target.isAdmin()
+                || (id != null && id.equals(target.id))) {
+            throw new BusinessException(ErrorCode.MEMBER_NOT_FOUND);
+        }
+        demoteToMember();
+        target.promoteToAdmin();
+    }
+
+    public boolean shouldDeleteTeamOnLeave(long activeMemberCount) {
+        requireActive();
+        if (isAdmin() && activeMemberCount > 1) {
+            throw new BusinessException(ErrorCode.ADMIN_TRANSFER_REQUIRED);
+        }
+        return isAdmin();
+    }
+
+    private void requireActive() {
+        if (!isActive()) {
+            throw new BusinessException(ErrorCode.NOT_TEAM_MEMBER);
+        }
+    }
+
 }
