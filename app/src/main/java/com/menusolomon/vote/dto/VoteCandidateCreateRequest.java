@@ -1,5 +1,7 @@
 package com.menusolomon.vote.dto;
 
+import com.menusolomon.vote.domain.CandidateSource;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-public record VoteCandidateCreateRequest(@NotNull @Positive Long teamRestaurantId) {}
+
+public record VoteCandidateCreateRequest(@NotBlank String kakaoPlaceId, @NotNull CandidateSource source) {}

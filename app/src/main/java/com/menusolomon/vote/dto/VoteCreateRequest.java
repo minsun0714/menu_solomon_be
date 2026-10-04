@@ -1,5 +1,6 @@
 package com.menusolomon.vote.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
-public record VoteCreateRequest(@NotBlank @Size(max = 100) String title) {}
+import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
+
+public record VoteCreateRequest(@NotNull Instant closesAt) {}

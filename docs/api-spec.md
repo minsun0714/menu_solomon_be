@@ -338,118 +338,39 @@ LATEST는 등록 최신순, NAME은 이름순, RATING_DESC는 평균 별점 내�
 성공: `204`. 현재 팀원의 리뷰만 삭제. 없으면 `404 REVIEW_NOT_FOUND`.
 공통 오류: `NOT_TEAM_MEMBER`, `TEAM_RESTAURANT_NOT_FOUND`; 입력 오류: `VALIDATION_ERROR`.
 
-## 8. 점심 투표
+## 8. 점심 투표 — 복수 선택 UI 계약
 
-공통 경로: `/teams/{teamId}/votes`. 모든 API는 ACTIVE 팀원 전용. 확정도 ADMIN 전용이 아니다.
-한 팀에 OPEN 투표 여러 개 가능. 상태는 OPEN / CONFIRMED.
-후보·참여 여부·투표 변경·확정은 OPEN에서만 가능. 확정 후 변경은 `409 VOTE_ALREADY_CONFIRMED`.
+전체 요청·응답 DTO, 상태·마감·추천·히스토리 정책은 [투표 API 상세 명세](lunch-vote.md)를 따른다.
+기존 단일 선택 계약은 대체되며 아래 경로는 모두 ACTIVE 팀원 전용이다.
+Base path는 `/api/teams/{teamId}`다.
 
-### POST `{공통 경로}`
+| Method | 경로 | 성공 | 설명 |
+| --- | --- | --- | --- |
+| POST | /votes | 201 | closesAt 필수, name=null로 생성 |
+| GET | /votes | 200 | 최신순, 마감 정산, 고유 투표자 수·내 선택 전체 |
+| GET | /votes/{voteId} | 200 | session·creatorNickname·decision |
+| PATCH | /votes/{voteId} | 200 | OPEN 이름·종료 시간 부분 수정 |
+| DELETE | /votes/{voteId} | 204 | 상태와 무관하게 삭제 |
+| POST | /votes/{voteId}/restart | 200 | 생성자, 후보/참여 유지·표 초기화·3시간 뒤 마감 |
+| GET | /votes/{voteId}/participants | 200 | 참여자 목록 |
+| PUT | /votes/{voteId}/participants/{targetTeamMemberId} | 200 | 다른 팀원도 변경 가능, 불참 시 표 전체 삭제 |
+| GET | /votes/{voteId}/candidates | 200 | 후보 목록, 리뷰 없으면 averageRating=0 |
+| POST | /votes/{voteId}/candidates | 201 | kakaoPlaceId + source |
+| DELETE | /votes/{voteId}/candidates/{candidateId} | 204 | 후보 및 연결된 표 삭제 |
+| GET | /votes/{voteId}/recommendations?cursor=0 | 200 | 최근 메뉴·후보·불참 리뷰 제외, 한 건 추천 |
+| PUT | /votes/{voteId}/ballots/me | 200 | candidateIds 배열로 내 복수 선택 전체 교체 |
+| DELETE | /votes/{voteId}/ballots/me | 204 | 내 투표 전체 취소 |
+| GET | /votes/{voteId}/results | 200 | 득표·고유 투표자 기준 득표율·ballot 전체 |
+| POST | /votes/{voteId}/decision | 201 | 생성자가 CLOSED 공동 최다 후보 중 확정 |
+| PATCH | /votes/{voteId}/decision | 200 | 생성자가 후보 식당으로 확정 수정 |
+| DELETE | /votes/{voteId}/decision | 204 | 생성자가 확정 삭제·CLOSED 전환 |
+| GET | /lunch-history?view=WEEK&date=2026-10-04 | 200 | 한국 시간, 월요일 시작 |
+| GET | /lunch-history?view=MONTH&month=2026-10 | 200 | 한국 시간, 월간 |
 
-```json
-{ "title": "오늘 점심 뭐 먹지?" }
-```
-
-title 필수·blank 불가·최대 100자. 성공: `201`.
-
-```json
-{ "data": { "id": "vote_1", "teamId": "team_1", "title": "오늘 점심 뭐 먹지?", "status": "OPEN", "createdAt": "2026-10-04T04:00:00Z" } }
-```
-
-생성 시 ACTIVE 팀원을 participating=true로 초기화한다. 생성 이후 가입한 팀원은 자신의 참여 API를 호출해야 투표할 수 있다.
-
-### GET `{공통 경로}?status=OPEN`
-
-성공: `200`. status 선택(OPEN/CONFIRMED). 생략 시 전체, OPEN 우선·createdAt 최신순.
-
-```json
-{ "data": [{ "id": "vote_1", "title": "오늘 점심 뭐 먹지?", "status": "OPEN", "createdAt": "2026-10-04T04:00:00Z", "participantCount": 2, "candidateCount": 1, "myParticipation": true, "myVoteCandidateId": "candidate_1" }] }
-```
-
-participantCount는 participating=true인 저장된 참여자 수. 투표하지 않았으면 myVoteCandidateId=null, 참여 행이 없으면 myParticipation=false.
-
-### GET `{공통 경로}/{voteId}`
-
-성공: `200`. teamId + voteId 범위 확인. 다른 팀 소속/없음은 `404 VOTE_NOT_FOUND`.
-
-```json
-{
-  "data": {
-    "id": "vote_1", "title": "오늘 점심 뭐 먹지?", "status": "OPEN", "createdAt": "2026-10-04T04:00:00Z",
-    "participantCount": 2,
-    "participants": [{ "teamMemberId": "member_1", "nickname": "익명 사용자 1234", "participating": true }],
-    "candidates": [{ "candidateId": "candidate_1", "restaurantId": "restaurant_1", "name": "맛있는 식당", "category": "한식", "address": "서울 강남구", "averageRating": 4.5, "voteCount": 1, "isMyVote": true }],
-    "myParticipation": true, "myVoteCandidateId": "candidate_1", "confirmedMenu": null
-  }
-}
-```
-
-participants는 저장된 투표 참여 상태 목록이다. 예시 배열은 축약했으며 count와 배열 길이가 반드시 같지는 않다(불참 포함).
-확정 후 confirmedMenu는 아래 확정 응답의 객체로 반환한다.
-
-### PUT `{공통 경로}/{voteId}/participants/me`
-
-```json
-{ "participating": false }
-```
-
-필수 boolean. 본인만 변경 가능. 불참 전환 시 본인의 해당 투표 기록 삭제. 다른 투표에는 영향 없음.
-성공: `200`.
-
-```json
-{ "data": { "teamMemberId": "member_1", "participating": false } }
-```
-
-### POST `{공통 경로}/{voteId}/candidates`
-
-```json
-{ "teamRestaurantId": 10 }
-```
-
-필수 양의 정수. 해당 팀에 등록된 식당만 후보 가능. 불참자도 후보 등록 가능.
-같은 투표의 Restaurant 중복은 `409 VOTE_CANDIDATE_ALREADY_EXISTS`.
-다른 팀 식당/없음은 `404 TEAM_RESTAURANT_NOT_FOUND`.
-성공: `201`.
-
-```json
-{ "data": { "candidateId": "candidate_1", "restaurantId": "restaurant_1", "name": "맛있는 식당", "category": "한식", "address": "서울 강남구", "averageRating": 4.5, "voteCount": 0, "isMyVote": false } }
-```
-
-averageRating은 해당 팀 식당 리뷰 평균이며 리뷰 없으면 null.
-
-### PUT `{공통 경로}/{voteId}/vote`
-
-```json
-{ "voteCandidateId": 100 }
-```
-
-필수 양의 정수. participating=true인 본인만 투표 가능. **투표당 한 후보만 선택**.
-처음에는 생성, 재투표는 같은 기록의 후보 변경. 성공은 모두 `200`이며 data는 위 후보 객체와 같은 형태.
-불참/참여 행 없음: `409 VOTE_PARTICIPATION_REQUIRED`.
-다른 투표 후보/없음: `404 VOTE_CANDIDATE_NOT_FOUND`.
-
-### POST `{공통 경로}/{voteId}/confirm`
-
-```json
-{ "voteCandidateId": 100 }
-```
-
-필수 양의 정수. 해당 투표의 후보이면 확정 가능(최다 득표나 참여 상태를 요구하지 않음).
-성공: `200`. 확정 결과는 투표당 하나이며 재확정은 `409 VOTE_ALREADY_CONFIRMED`.
-
-```json
-{ "data": { "voteId": "vote_1", "status": "CONFIRMED", "confirmedMenu": { "candidateId": "candidate_1", "restaurantId": "restaurant_1", "name": "맛있는 식당", "voteCount": 5, "confirmedAt": "2026-10-04T05:00:00Z" } } }
-```
-
-다른 투표 후보/없음: `404 VOTE_CANDIDATE_NOT_FOUND`.
-
-### GET `{공통 경로}/history`
-
-성공: `200`. CONFIRMED 투표만, confirmedAt 최신순. 현재 주간/월간 필터 없음.
-
-```json
-{ "data": [{ "voteId": "vote_1", "title": "오늘 점심 뭐 먹지?", "confirmedAt": "2026-10-04T05:00:00Z", "restaurantId": "restaurant_1", "restaurantName": "맛있는 식당", "voteCount": 5, "participantCount": 6 }] }
-```
+상태는 OPEN/CLOSED/CONFIRMED. 스케줄러와 목록·상세·결과 조회에서 마감 정산한다.
+단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED.
+복수 선택은 후보별 행으로 저장하며 `(session_id, candidate_id, team_member_id)` UNIQUE를 사용한다.
+기존 MySQL 스키마 전환 절차는 상세 명세와 [전환 SQL](migrations/20261004-vote-ui-contract.sql)에 있다.
 
 ## 9. 오류 코드
 
@@ -457,9 +378,9 @@ averageRating은 해당 팀 식당 리뷰 평균이며 리뷰 없으면 null.
 | --- | --- |
 | 400 | VALIDATION_ERROR |
 | 401 | SESSION_REQUIRED |
-| 403 | NOT_TEAM_MEMBER, ADMIN_REQUIRED |
-| 404 | TEAM_NOT_FOUND, MEMBER_NOT_FOUND, INVITATION_NOT_FOUND, TEAM_RESTAURANT_NOT_FOUND, REVIEW_NOT_FOUND, KAKAO_PLACE_NOT_FOUND, VOTE_NOT_FOUND, VOTE_CANDIDATE_NOT_FOUND |
-| 409 | ADMIN_TRANSFER_REQUIRED, RESTAURANT_ALREADY_REGISTERED, VOTE_CANDIDATE_ALREADY_EXISTS, VOTE_ALREADY_CONFIRMED, VOTE_PARTICIPATION_REQUIRED |
+| 403 | NOT_TEAM_MEMBER, ADMIN_REQUIRED, VOTE_CREATOR_REQUIRED |
+| 404 | TEAM_NOT_FOUND, MEMBER_NOT_FOUND, INVITATION_NOT_FOUND, TEAM_RESTAURANT_NOT_FOUND, REVIEW_NOT_FOUND, KAKAO_PLACE_NOT_FOUND, VOTE_NOT_FOUND, VOTE_CANDIDATE_NOT_FOUND, TEAM_MEMBER_NOT_FOUND, DECISION_NOT_FOUND |
+| 409 | ADMIN_TRANSFER_REQUIRED, RESTAURANT_ALREADY_REGISTERED, VOTE_CANDIDATE_ALREADY_EXISTS, VOTE_ALREADY_CONFIRMED, VOTE_PARTICIPATION_REQUIRED, VOTE_NOT_OPEN, VOTE_NOT_CLOSED, INVALID_DECISION_CANDIDATE |
 | 502 | KAKAO_API_ERROR |
 | 500 | INTERNAL_SERVER_ERROR |
 
@@ -467,6 +388,3 @@ averageRating은 해당 팀 식당 리뷰 평균이며 리뷰 없으면 null.
 
 - 로그아웃, 닉네임/프로필 수정
 - 사무실 해제 및 `/office-location` 경로
-- 투표 제목 수정·삭제·재시작·후보 삭제·투표 취소 API
-- 복수 선택 투표, 종료 시간, 자동 확정, 추천
-- `/lunch-history` 경로, 주간·월간 히스토리 필터
