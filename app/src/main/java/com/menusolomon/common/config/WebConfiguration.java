@@ -33,6 +33,7 @@ public class WebConfiguration implements WebMvcConfigurer {
         // Numeric path IDs also accept the public IDs returned in API responses.
         registry.addConverter(String.class, Long.class, value ->
                 Long.valueOf(value.startsWith("teamRestaurant_") ? value.substring(15)
+                        : value.startsWith("vote_") ? value.substring(5)
                         : value.startsWith("team_") ? value.substring(5) : value));
     }
 }

@@ -23,6 +23,7 @@ import com.menusolomon.team.dto.TeamJoinResponse;
 import com.menusolomon.team.dto.TeamJoinResult;
 import com.menusolomon.team.repository.TeamMemberRepository;
 import com.menusolomon.team.repository.TeamRepository;
+import com.menusolomon.vote.service.VoteService;
 import com.menusolomon.user.domain.User;
 import com.menusolomon.user.repository.UserRepository;
 import com.menusolomon.user.service.UserService;
@@ -49,6 +50,7 @@ public class TeamServiceImpl implements TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final ReviewRepository reviewRepository;
     private final TeamRestaurantRepository teamRestaurantRepository;
+    private final VoteService voteService;
     private final Clock clock;
     private final String frontendBaseUrl;
 
@@ -59,6 +61,7 @@ public class TeamServiceImpl implements TeamService {
             TeamMemberRepository teamMemberRepository,
             ReviewRepository reviewRepository,
             TeamRestaurantRepository teamRestaurantRepository,
+            VoteService voteService,
             Clock clock,
             @Value("${app.frontend-base-url:https://example.com}") String frontendBaseUrl
     ) {
@@ -68,6 +71,7 @@ public class TeamServiceImpl implements TeamService {
         this.teamMemberRepository = teamMemberRepository;
         this.reviewRepository = reviewRepository;
         this.teamRestaurantRepository = teamRestaurantRepository;
+        this.voteService = voteService;
         this.clock = clock;
         this.frontendBaseUrl = frontendBaseUrl.replaceAll("/+$", "");
     }
@@ -176,6 +180,7 @@ public class TeamServiceImpl implements TeamService {
         long activeCount = teamMemberRepository.countByTeamIdAndLeftAtIsNull(teamId);
         if (member.shouldDeleteTeamOnLeave(activeCount)) {
             Team team = requireTeam(teamId);
+            voteService.deleteTeamData(teamId);
             reviewRepository.deleteAllByTeamId(teamId);
             teamRestaurantRepository.deleteAllByTeamId(teamId);
             teamMemberRepository.deleteAllByTeamId(teamId);
