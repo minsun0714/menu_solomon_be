@@ -33,13 +33,29 @@ class VoteControllerTest {
     private DecisionResponse decision() { return new DecisionResponse("decision_1","vote_5","restaurant_3","member_1",ConfirmationType.MANUAL,NOW); }
 
     @Test void create_returns201WithNullableNameAndDeadline() throws Exception {
-        when(service.createVote(1L,"token",DEADLINE)).thenReturn(response());
+        when(service.createVote(1L,"token",null,DEADLINE)).thenReturn(response());
         mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{\"closesAt\":\""+DEADLINE+"\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.data.id").value("vote_5"))
                 .andExpect(jsonPath("$.data.teamId").value("team_1"))
                 .andExpect(jsonPath("$.data.createdByTeamMemberId").value("member_1"))
                 .andExpect(jsonPath("$.data.name").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
+    }
+    @ParameterizedTest @ValueSource(strings={"name","title"})
+    void create_acceptsCanonicalNameAndFrontendTitleAlias(String field) throws Exception {
+        var named=session(); named.update("asf",null,NOW);
+        when(service.createVote(1L,"token","asf",DEADLINE)).thenReturn(VoteSessionResponse.from(named));
+        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\""+field+"\":\"asf\",\"closesAt\":\""+DEADLINE+"\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.data.name").value("asf"));
+        verify(service).createVote(1L,"token","asf",DEADLINE);
+    }
+    @ParameterizedTest @ValueSource(strings={"", " ", "12345678901234567890123456789012345678901"})
+    void create_invalidName_returns400WithoutServiceCall(String name) throws Exception {
+        mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\""+name+"\",\"closesAt\":\""+DEADLINE+"\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        verifyNoInteractions(service);
     }
     @Test void create_missingDeadline_returns400ProblemDetail() throws Exception {
         mvc.perform(post(ROOT).cookie(cookie()).contentType(MediaType.APPLICATION_JSON).content("{}"))

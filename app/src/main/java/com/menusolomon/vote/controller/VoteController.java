@@ -42,7 +42,7 @@ public class VoteController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<VoteSessionResponse>> create(@PathVariable Long teamId, @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token, @Valid @RequestBody VoteCreateRequest request) {
-        return ResponseEntity.status(201).body(ApiResponse.of(service.createVote(teamId, token, request.closesAt())));
+        return ResponseEntity.status(201).body(ApiResponse.of(service.createVote(teamId, token, request.name(), request.closesAt())));
     }
 
     @GetMapping

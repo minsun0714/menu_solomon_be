@@ -18,6 +18,11 @@ class VoteDomainTest {
         assertThat(vote.getStatus()).isEqualTo(VoteStatus.OPEN);
         assertThat(vote.getClosesAt()).isEqualTo(NOW.plusSeconds(10800));
     }
+    @Test void create_withNameStoresNameAndProtectsInvariant() {
+        assertThat(LunchVoteSession.create(1L,2L,"asf",NOW.plusSeconds(1),NOW).getName()).isEqualTo("asf");
+        assertThatThrownBy(() -> LunchVoteSession.create(1L,2L," ",NOW.plusSeconds(1),NOW))
+                .hasFieldOrPropertyWithValue("errorCode",ErrorCode.VALIDATION_ERROR);
+    }
     @Test void create_nonFutureDeadline_isRejected() {
         assertThatThrownBy(() -> LunchVoteSession.create(1L, 2L, NOW, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VALIDATION_ERROR);
     }
