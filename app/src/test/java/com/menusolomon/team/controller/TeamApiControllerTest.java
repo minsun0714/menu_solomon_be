@@ -1,6 +1,5 @@
 package com.menusolomon.team.controller;
 
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -12,7 +11,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import com.menusolomon.common.web.WebConstants;
+import com.menusolomon.team.dto.InvitationMemberResponse;
 import com.menusolomon.team.dto.InvitationPreviewResponse;
+import com.menusolomon.team.dto.InvitationUserResponse;
 import com.menusolomon.team.dto.TeamCreateRequest;
 import com.menusolomon.team.dto.TeamCreateResponse;
 import com.menusolomon.team.dto.TeamJoinResponse;
@@ -24,12 +25,11 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-@org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest(
-        controllers = {TeamController.class, InvitationController.class}
-)
+@WebMvcTest(controllers = {TeamController.class, InvitationController.class})
 class TeamApiControllerTest {
 
     private static final String SESSION_TOKEN = "opaque-session-token";
@@ -155,7 +155,19 @@ class TeamApiControllerTest {
     }
 
     private InvitationPreviewResponse preview(boolean isAlreadyMember) {
-        return new InvitationPreviewResponse("team_1", "솔로몬 개발팀", "", 1, isAlreadyMember, List.of());
+        return new InvitationPreviewResponse(
+                "team_1",
+                "솔로몬 개발팀",
+                "",
+                1,
+                isAlreadyMember,
+                List.of(new InvitationMemberResponse(
+                        "member_1",
+                        "ADMIN",
+                        Instant.parse("2026-10-01T02:00:00Z"),
+                        new InvitationUserResponse("user_1", "익명 사용자 1234")
+                ))
+        );
     }
 
     private TeamJoinResult joinResult(boolean created) {
