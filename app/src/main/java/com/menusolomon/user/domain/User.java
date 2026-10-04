@@ -17,13 +17,11 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "kakao_id", nullable = false, unique = true)
-    private String kakaoId;
+    @Column(name = "anonymous_token_hash", nullable = false, unique = true)
+    private String anonymousTokenHash;
 
     @Column(nullable = false)
     private String nickname;
-
-    private String profileImageUrl;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -34,10 +32,9 @@ public class User {
     protected User() {
     }
 
-    public User(String kakaoId, String nickname, String profileImageUrl, Instant now) {
-        this.kakaoId = kakaoId;
+    public User(String anonymousTokenHash, String nickname, Instant now) {
+        this.anonymousTokenHash = anonymousTokenHash;
         this.nickname = nickname;
-        this.profileImageUrl = profileImageUrl;
         this.createdAt = now;
         this.updatedAt = now;
     }

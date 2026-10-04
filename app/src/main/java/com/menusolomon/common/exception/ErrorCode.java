@@ -3,13 +3,9 @@ package com.menusolomon.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
-    INVALID_INVITE_TOKEN(HttpStatus.NOT_FOUND, "Invalid invite token"),
-    TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "Team not found"),
-    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "Member not found"),
-    ALREADY_TEAM_MEMBER(HttpStatus.CONFLICT, "User is already an active team member"),
-    ADMIN_TRANSFER_REQUIRED(HttpStatus.CONFLICT, "Admin must transfer ownership before leaving"),
-    PERMISSION_DENIED(HttpStatus.FORBIDDEN, "Permission denied"),
-    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Bad request");
+    VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "입력값을 확인해 주세요."),
+    SESSION_REQUIRED(HttpStatus.UNAUTHORIZED, "세션이 필요합니다."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다.");
 
     private final HttpStatus status;
     private final String message;

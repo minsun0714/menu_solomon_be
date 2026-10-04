@@ -40,7 +40,11 @@ public class TeamMember {
     protected TeamMember() {
     }
 
-    public TeamMember(Long teamId, Long userId, TeamRole role, Instant joinedAt) {
+    public static TeamMember newAdmin(Long teamId, Long userId, Instant joinedAt) {
+        return new TeamMember(teamId, userId, TeamRole.ADMIN, joinedAt);
+    }
+
+    private TeamMember(Long teamId, Long userId, TeamRole role, Instant joinedAt) {
         this.teamId = teamId;
         this.userId = userId;
         this.role = role;
