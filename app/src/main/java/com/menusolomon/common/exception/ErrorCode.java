@@ -8,6 +8,10 @@ public enum ErrorCode {
     NOT_TEAM_MEMBER(HttpStatus.FORBIDDEN, "팀원만 사용할 수 있습니다."),
     TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "팀을 찾을 수 없습니다."),
     INVITATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Invitation was not found"),
+    TEAM_RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "팀 식당을 찾을 수 없습니다."),
+    RESTAURANT_ALREADY_REGISTERED(HttpStatus.CONFLICT, "같은 팀에 이미 등록된 식당입니다."),
+    KAKAO_PLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "카카오 장소를 찾을 수 없습니다."),
+    KAKAO_API_ERROR(HttpStatus.BAD_GATEWAY, "카카오 장소 API 호출에 실패했습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
     private final HttpStatus status;
