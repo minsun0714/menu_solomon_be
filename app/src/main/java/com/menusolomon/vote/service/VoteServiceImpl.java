@@ -129,6 +129,16 @@ public class VoteServiceImpl implements VoteService {
     }
 
     @Override
+    public VoteSessionResponse closeVote(Long teamId, Long voteId, String token) {
+        requireMember(teamId, token);
+        var vote = scopedVote(teamId, voteId);
+        Instant now = Instant.now(clock);
+        vote.expireNow(now);
+        settle(vote, now);
+        return VoteSessionResponse.from(vote);
+    }
+
+    @Override
     public VoteSessionResponse restart(Long teamId, Long voteId, String token) {
         var member = requireMember(teamId, token);
         var vote = scopedVote(teamId, voteId);

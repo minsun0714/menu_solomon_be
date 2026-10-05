@@ -57,6 +57,12 @@ public class LunchVoteSession {
         if (name != null) this.name = name;
         if (closesAt != null) this.closesAt = closesAt;
     }
+    public void expireNow(Instant now) {
+        if (status != VoteStatus.OPEN || !closesAt.isAfter(now)) {
+            throw new BusinessException(ErrorCode.VOTE_NOT_OPEN);
+        }
+        closesAt = now;
+    }
     public void close(Instant now) {
         if (!isDue(now)) throw new BusinessException(ErrorCode.VOTE_NOT_CLOSED);
         status = VoteStatus.CLOSED;

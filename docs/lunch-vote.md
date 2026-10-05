@@ -192,6 +192,25 @@ myBallotCandidateIds는 현재 팀원 선택 전체이며 없으면 빈 배열�
 모든 ACTIVE 팀원. OPEN/CLOSED/CONFIRMED 모두 가능. 참여자·후보·투표·확정 결과 함께 삭제.
 공유 Restaurant는 유지. `204 No Content`.
 
+### POST `/votes/{voteId}/close` — 지금 마감
+
+모든 ACTIVE 팀원(생성자 여부와 무관)이 OPEN·마감 전 투표를 즉시 마감할 수 있다. 본문 없음.
+서버 현재 시각으로 `closesAt`을 변경하고 같은 트랜잭션에서 기존 마감 정산을 수행한다.
+
+- 양수 득표의 단독 최다 후보: CONFIRMED 및 AUTO 확정 결과 생성.
+- 동점·무투표·후보 없음: CLOSED, 확정 결과 없음.
+- 이미 CLOSED/CONFIRMED이거나 종료 시간이 지난 경우: `409 VOTE_NOT_OPEN`.
+- 성공: `200 OK`, `data=VoteSession`이며 `closesAt`은 즉시 마감한 서버 시각이다.
+
+```http
+POST /api/teams/team_15/votes/vote_5/close
+Cookie: menu_solomon_session={token}
+```
+
+프론트는 OPEN 투표에 지금 마감 버튼을 제공하고 확인 모달을 거쳐 호출한다.
+성공 후 세션·투표 결과를 갱신하고, 자동 확정된 경우 상세 응답의 Decision을 조회한다.
+확인 안내: “투표를 지금 마감할까요? 마감 후에는 참여 상태, 후보, 투표 내역을 변경할 수 없습니다.”
+
 ### POST `/votes/{voteId}/restart` — 다시 시작
 
 투표 생성자만, OPEN/CLOSED만. 본문 없음. `200`, data=VoteSession.
@@ -384,6 +403,7 @@ view 필수 WEEK/MONTH. WEEK에는 date, MONTH에는 month가 필수이며 다�
 | 생성 | ACTIVE 팀원 | 제한 없음 |
 | 조회 | ACTIVE 팀원 | 전체 |
 | 이름 수정 | ACTIVE 팀원 | OPEN·CLOSED·CONFIRMED |
+| 지금 마감 | ACTIVE 팀원 | OPEN·마감 전 |
 | 종료 시간 수정, 후보 추가·삭제, 참여 변경 | ACTIVE 팀원 | OPEN·마감 전 |
 | 투표 삭제 | ACTIVE 팀원 | 전체 |
 | 참여 상태 변경 | ACTIVE 팀원, 다른 팀원 대상 가능 | OPEN·마감 전 |

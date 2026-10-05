@@ -23,6 +23,7 @@ public interface VoteService {
     VoteDetailResponse getVoteDetail(Long teamId, Long voteId, String token);
     VoteSessionResponse updateVote(Long teamId, Long voteId, String token, VoteUpdateRequest request);
     void deleteVote(Long teamId, Long voteId, String token);
+    VoteSessionResponse closeVote(Long teamId, Long voteId, String token);
     VoteSessionResponse restart(Long teamId, Long voteId, String token);
     List<VoteParticipantResponse> getParticipants(Long teamId, Long voteId, String token);
     VoteParticipantResponse updateParticipation(Long teamId, Long voteId, String token, Long targetMemberId, boolean participating);

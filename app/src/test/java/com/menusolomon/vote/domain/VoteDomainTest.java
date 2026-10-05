@@ -92,6 +92,35 @@ class VoteDomainTest {
         assertThat(vote.getClosesAt()).isEqualTo(deadline);
     }
 
+    @Test
+    @DisplayName("즉시 마감 요청은 종료 시간을 서버 현재 시각으로 바꾸고 정산 가능한 상태로 만든다")
+    void expireNow_openVote_becomesDue() {
+        var vote = session();
+        vote.expireNow(NOW);
+        assertThat(vote.getClosesAt()).isEqualTo(NOW);
+        assertThat(vote.isDue(NOW)).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("이미 마감 또는 확정된 투표의 즉시 마감은 VOTE_NOT_OPEN으로 거절한다")
+    void expireNow_closedOrConfirmed_isRejected(VoteStatus status) {
+        var vote = session(); Instant deadline = vote.getClosesAt();
+        vote.close(deadline);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        assertThatThrownBy(() -> vote.expireNow(deadline.plusSeconds(1)))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_NOT_OPEN);
+        assertThat(vote.getClosesAt()).isEqualTo(deadline);
+    }
+
+    @Test
+    @DisplayName("종료 시간이 이미 지난 OPEN 투표도 즉시 마감 요청을 거절한다")
+    void expireNow_alreadyExpired_isRejected() {
+        var vote = session();
+        assertThatThrownBy(() -> vote.expireNow(vote.getClosesAt()))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_NOT_OPEN);
+    }
+
     @Test void deadlineBoundary_closesAtIsNotOpen() {
         var vote = session();
         assertThat(vote.isDue(vote.getClosesAt())).isTrue();

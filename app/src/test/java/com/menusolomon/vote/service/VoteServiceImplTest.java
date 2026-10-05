@@ -203,6 +203,63 @@ class VoteServiceImplTest {
         var result=service.getResults(1L,5L,"token");
         assertThat(result.results()).extracting(VoteResultItem::percentage).containsExactly(100.0,100.0);
     }
+    @Test
+    @DisplayName("ACTIVE 일반 팀원의 즉시 마감은 단독 양수 최다 후보를 자동 확정한다")
+    void closeVote_uniquePositiveLeader_confirmsAutomatically() {
+        identity();
+        var vote = id(LunchVoteSession.create(1L, 2L, DEADLINE, NOW), 5L);
+        when(sessions.findScopedForUpdate(5L, 1L)).thenReturn(Optional.of(vote));
+        when(candidates.findTally(5L)).thenReturn(List.of(new VoteTally.Entry(100L, 3L, 2), new VoteTally.Entry(200L, 4L, 1)));
+        var result = service.closeVote(1L, 5L, "token");
+        assertThat(result.status()).isEqualTo(VoteStatus.CONFIRMED);
+        assertThat(result.closesAt()).isEqualTo(NOW);
+        verify(decisions).saveAndFlush(argThat(decision -> decision.getConfirmationType() == ConfirmationType.AUTO
+                && decision.getConfirmedByTeamMemberId() == null && decision.getRestaurantId().equals(3L)));
+        assertThat(vote.getStatus()).isEqualTo(VoteStatus.CONFIRMED);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"tie", "noVotes", "noCandidates"})
+    @DisplayName("동점 또는 무투표 또는 후보 없는 투표의 즉시 마감은 CLOSED로 정산한다")
+    void closeVote_withoutUniquePositiveWinner_closes(String scenario) {
+        scoped();
+        var entries = switch (scenario) {
+            case "tie" -> List.of(new VoteTally.Entry(100L, 3L, 1), new VoteTally.Entry(200L, 4L, 1));
+            case "noVotes" -> List.of(new VoteTally.Entry(100L, 3L, 0));
+            default -> List.<VoteTally.Entry>of();
+        };
+        when(candidates.findTally(5L)).thenReturn(entries);
+        var result = service.closeVote(1L, 5L, "token");
+        assertThat(result.status()).isEqualTo(VoteStatus.CLOSED);
+        assertThat(result.closesAt()).isEqualTo(NOW);
+        verifyNoInteractions(decisions);
+    }
+
+    @Test
+    @DisplayName("비팀원은 즉시 투표 마감에 접근할 수 없다")
+    void closeVote_nonMember_isRejected() {
+        error(() -> service.closeVote(1L, 5L, "token"), ErrorCode.NOT_TEAM_MEMBER);
+        verifyNoInteractions(sessions, decisions);
+    }
+
+    @Test
+    @DisplayName("다른 팀의 투표는 즉시 마감할 수 없다")
+    void closeVote_otherTeam_isNotFound() {
+        identity();
+        error(() -> service.closeVote(1L, 5L, "token"), ErrorCode.VOTE_NOT_FOUND);
+        verifyNoInteractions(decisions);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("이미 마감된 투표의 즉시 마감은 중복 정산 없이 거절한다")
+    void closeVote_alreadyEnded_isRejected(VoteStatus status) {
+        var vote = scoped(); vote.close(DEADLINE);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        error(() -> service.closeVote(1L, 5L, "token"), ErrorCode.VOTE_NOT_OPEN);
+        verifyNoInteractions(candidates, decisions);
+    }
+
     @Test void settleExpired_uniquePositiveLeaderAutomaticallyConfirmsExactlyOnce() {
         var vote=id(LunchVoteSession.create(1L,1L,NOW.minusSeconds(1),NOW.minusSeconds(10)),5L);
         when(sessions.findForUpdate(5L)).thenReturn(Optional.of(vote));
