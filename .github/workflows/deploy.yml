@@ -1,0 +1,130 @@
+name: Test and deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Run tests
+        run: ./gradlew :app:test --no-daemon
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate production Compose files
+        run: |
+          test -f Caddyfile
+          docker compose config --no-interpolate --no-env-resolution --quiet
+          docker compose config --no-interpolate --no-env-resolution --services | grep -qx app
+          docker compose config --no-interpolate --no-env-resolution --services | grep -qx caddy
+      - name: Set image tag
+        id: image
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+        run: |
+          : "${DOCKERHUB_IMAGE:?Set the DOCKERHUB_IMAGE repository variable}"
+          echo "name=${DOCKERHUB_IMAGE}:sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: menu-solomon-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      HEALTH_URL: ${{ vars.DEPLOY_HEALTH_URL }}
+      IMAGE: ${{ needs.publish.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          : "${DEPLOY_HOST:?Set DEPLOY_HOST}"
+          : "${DEPLOY_USER:?Set DEPLOY_USER}"
+          : "${DEPLOY_PATH:?Set DEPLOY_PATH}"
+          : "${HEALTH_URL:?Set DEPLOY_HEALTH_URL}"
+          : "${SSH_PRIVATE_KEY:?Set DEPLOY_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Set DEPLOY_SSH_KNOWN_HOSTS}"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/deploy_key"
+          chmod 600 "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Copy production Compose files
+        run: |
+          scp -i "$RUNNER_TEMP/deploy_key" -P "$DEPLOY_PORT" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            compose.yml Caddyfile \
+            "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+      - name: Deploy image
+        run: |
+          ssh -i "$RUNNER_TEMP/deploy_key" -p "$DEPLOY_PORT" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "bash -s -- '$DEPLOY_PATH' '$IMAGE'" <<'REMOTE'
+          set -euo pipefail
+          cd "$1"
+          image="$2"
+          test -f .env
+          if grep -q '^APP_IMAGE=' .env; then
+            sed -i "s|^APP_IMAGE=.*|APP_IMAGE=$image|" .env
+          else
+            printf '\nAPP_IMAGE=%s\n' "$image" >> .env
+          fi
+          docker compose pull app
+          docker compose up -d
+          REMOTE
+      - name: Check deployed application
+        run: |
+          for attempt in {1..24}; do
+            if response=$(curl --fail --silent --show-error --max-time 10 "$HEALTH_URL"); then
+              if [ "$(jq -r '.status' <<< "$response")" = UP ]; then
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo 'Deployment health check did not report UP' >&2
+          exit 1
