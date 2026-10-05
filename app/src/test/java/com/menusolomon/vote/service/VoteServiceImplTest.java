@@ -21,6 +21,8 @@ import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -112,6 +114,26 @@ class VoteServiceImplTest {
         var vote=scoped(); service.updateVote(1L,5L,"token",new VoteUpdateRequest("점심",null));
         assertThat(vote.getName()).isEqualTo("점심"); assertThat(vote.getClosesAt()).isEqualTo(DEADLINE);
     }
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("ACTIVE 일반 팀원도 마감 또는 확정된 투표의 이름을 변경할 수 있다")
+    void updateVote_closedOrConfirmed_canRename(VoteStatus status) {
+        var vote = scoped(); vote.close(DEADLINE);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        var result = service.updateVote(1L, 5L, "token", new VoteUpdateRequest("새 투표명", null));
+        assertThat(result.name()).isEqualTo("새 투표명");
+        assertThat(result.status()).isEqualTo(status);
+        assertThat(vote.getClosesAt()).isEqualTo(DEADLINE);
+        verifyNoInteractions(decisions);
+    }
+
+    @Test
+    @DisplayName("비팀원은 마감 여부와 관계없이 투표 이름을 변경할 수 없다")
+    void updateVote_nonMember_cannotRename() {
+        error(() -> service.updateVote(1L, 5L, "token", new VoteUpdateRequest("새 투표명", null)), ErrorCode.NOT_TEAM_MEMBER);
+        verifyNoInteractions(sessions);
+    }
+
     @Test void updateVote_pastDeadlineIsRejectedBeforeChanging() {
         var vote=scoped(); error(() -> service.updateVote(1L,5L,"token",new VoteUpdateRequest("점심",NOW)),ErrorCode.VALIDATION_ERROR);
         assertThat(vote.getName()).isNull();

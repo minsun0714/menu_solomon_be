@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -63,6 +64,23 @@ class VoteControllerTest {
                 .andExpect(jsonPath("$.detail").value("마감 시간은 현재 시각 이후여야 합니다."))
                 .andExpect(jsonPath("$.instance").value(path))
                 .andExpect(jsonPath("$.fieldErrors.closesAt").value("선택한 마감 시간이 지났습니다. 다시 설정해 주세요."));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("마감 또는 확정된 투표의 이름 변경은 200과 기존 상태를 반환한다")
+    void patch_closedOrConfirmedVoteName_returns200(VoteStatus status) throws Exception {
+        var vote = session(); vote.close(DEADLINE);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        vote.update("새 투표명", null, DEADLINE);
+        when(service.updateVote(1L, 5L, "token", new VoteUpdateRequest("새 투표명", null)))
+                .thenReturn(VoteSessionResponse.from(vote));
+        mvc.perform(patch(VOTE).cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"새 투표명\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("새 투표명"))
+                .andExpect(jsonPath("$.data.status").value(status.name()))
+                .andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
     }
 
     @ParameterizedTest @ValueSource(strings={"name","title"})

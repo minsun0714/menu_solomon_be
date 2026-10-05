@@ -377,7 +377,7 @@ Base path는 `/api/teams/{teamId}`다.
 | POST | /votes | 201 | closesAt 필수·name 선택(title 별칭 지원) |
 | GET | /votes | 200 | 최신순, 마감 정산, 고유 투표자 수·내 선택 전체 |
 | GET | /votes/{voteId} | 200 | session·creatorNickname·decision |
-| PATCH | /votes/{voteId} | 200 | OPEN 이름·종료 시간 부분 수정 |
+| PATCH | /votes/{voteId} | 200 | 이름은 모든 상태, 종료 시간은 OPEN·마감 전에서 부분 수정 |
 | DELETE | /votes/{voteId} | 204 | 상태와 무관하게 삭제 |
 | POST | /votes/{voteId}/restart | 200 | 생성자, 후보/참여 유지·표 초기화·3시간 뒤 마감 |
 | GET | /votes/{voteId}/participants | 200 | 참여자 목록 |

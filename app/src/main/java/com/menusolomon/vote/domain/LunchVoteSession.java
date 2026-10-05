@@ -48,10 +48,12 @@ public class LunchVoteSession {
         if (!createdByTeamMemberId.equals(memberId)) throw new BusinessException(ErrorCode.VOTE_CREATOR_REQUIRED);
     }
     public void update(String name, Instant closesAt, Instant now) {
-        requireOpen(now);
         if (name == null && closesAt == null) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         validateName(name);
-        if (closesAt != null) validateTime(closesAt, now);
+        if (closesAt != null) {
+            requireOpen(now);
+            validateTime(closesAt, now);
+        }
         if (name != null) this.name = name;
         if (closesAt != null) this.closesAt = closesAt;
     }
