@@ -83,6 +83,32 @@ class VoteControllerTest {
                 .andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
     }
 
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("즉시 마감 API는 본문 없이 호출하며 정산된 투표를 200으로 반환한다")
+    void closeVote_returnsSettledSession(VoteStatus status) throws Exception {
+        var vote = session(); vote.expireNow(NOW); vote.close(NOW);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        when(service.closeVote(1L, 5L, "token")).thenReturn(VoteSessionResponse.from(vote));
+        mvc.perform(post(VOTE + "/close").cookie(cookie()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("vote_5"))
+                .andExpect(jsonPath("$.data.status").value(status.name()))
+                .andExpect(jsonPath("$.data.closesAt").value(NOW.toString()));
+        verify(service).closeVote(1L, 5L, "token");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ErrorCode.class, names = {"NOT_TEAM_MEMBER", "VOTE_NOT_FOUND", "VOTE_NOT_OPEN"})
+    @DisplayName("즉시 마감의 권한·소속·상태 오류는 기존 ProblemDetail로 반환한다")
+    void closeVote_rejected_returnsProblemDetail(ErrorCode code) throws Exception {
+        when(service.closeVote(1L, 5L, "token")).thenThrow(new BusinessException(code));
+        mvc.perform(post(VOTE + "/close").cookie(cookie()))
+                .andExpect(status().is(code.getStatus().value()))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value(code.name()));
+    }
+
     @ParameterizedTest @ValueSource(strings={"name","title"})
     void create_acceptsCanonicalNameAndFrontendTitleAlias(String field) throws Exception {
         var named=session(); named.update("asf",null,NOW);

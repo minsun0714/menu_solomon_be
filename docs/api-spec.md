@@ -379,6 +379,7 @@ Base path는 `/api/teams/{teamId}`다.
 | GET | /votes/{voteId} | 200 | session·creatorNickname·decision |
 | PATCH | /votes/{voteId} | 200 | 이름은 모든 상태, 종료 시간은 OPEN·마감 전에서 부분 수정 |
 | DELETE | /votes/{voteId} | 204 | 상태와 무관하게 삭제 |
+| POST | /votes/{voteId}/close | 200 | 모든 ACTIVE 팀원이 OPEN·마감 전 투표를 즉시 정산 |
 | POST | /votes/{voteId}/restart | 200 | 생성자, 후보/참여 유지·표 초기화·3시간 뒤 마감 |
 | GET | /votes/{voteId}/participants | 200 | 참여자 목록 |
 | PUT | /votes/{voteId}/participants/{targetTeamMemberId} | 200 | 다른 팀원도 변경 가능, 불참 시 표 전체 삭제 |
@@ -405,6 +406,10 @@ closesAt은 필수이며 서버 현재 시각보다 이후여야 한다.
 `400 VALIDATION_ERROR`, `detail: "마감 시간은 현재 시각 이후여야 합니다."`,
 `fieldErrors.closesAt: "선택한 마감 시간이 지났습니다. 다시 설정해 주세요."`를 반환한다.
 서버는 최소 1분을 강제하거나 전송받은 시간을 보정하지 않는다.
+
+`POST /votes/{voteId}/close`는 본문 없이 호출한다. 종료 시간을 서버 현재 시각으로 변경한 뒤
+같은 트랜잭션에서 정산하여 VoteSession을 반환한다. 이미 마감됐거나 시간이 지난 투표는
+`409 VOTE_NOT_OPEN`이다. 생성자 전용 기능이 아니며 모든 ACTIVE 팀원이 사용할 수 있다.
 
 단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED. 후보가 정확히 하나이고 0표이면 생성자가 해당 후보를 수동 확정할 수 있다.
 복수 선택은 후보별 행으로 저장하며 `(session_id, candidate_id, team_member_id)` UNIQUE를 사용한다.

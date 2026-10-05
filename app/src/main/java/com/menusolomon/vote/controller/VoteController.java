@@ -65,6 +65,12 @@ public class VoteController {
         service.deleteVote(teamId, voteId, token); return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{voteId}/close")
+    public ApiResponse<VoteSessionResponse> close(@PathVariable Long teamId, @PathVariable Long voteId,
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token) {
+        return ApiResponse.of(service.closeVote(teamId, voteId, token));
+    }
+
     @PostMapping("/{voteId}/restart")
     public ApiResponse<VoteSessionResponse> restart(@PathVariable Long teamId, @PathVariable Long voteId, @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String token) {
         return ApiResponse.of(service.restart(teamId, voteId, token));

@@ -48,7 +48,7 @@ MYSQL_VOTE_TEST_PASSWORD=vote-test-only \
 
 ## 검증과 현재 결과
 
-실제 MySQL 8.4 회귀 테스트 5개 모두 통과했고, MySQL 테스트를 포함한 전체 425개 테스트도 실패·skip 없이 통과했다.
+실제 MySQL 8.4 회귀 테스트 6개 모두 통과했고, MySQL 테스트를 포함한 전체 475개 테스트도 실패·skip 없이 통과했다.
 
 | 검증 | 수정 전 | 수정 후 |
 | --- | --- | --- |
@@ -56,6 +56,7 @@ MYSQL_VOTE_TEST_PASSWORD=vote-test-only \
 | B: REPEATABLE READ에서 후보 탐색 후 다른 트랜잭션 확정 → PK locking read는 최신 CONFIRMED 확인, 재정산 생략 | 통과 | 통과 |
 | C: PK 보유 트랜잭션의 status UPDATE와 실제 getVotes 정산 경쟁 | 실패: 실제 MySQL deadlock | 통과: 5회 반복 |
 | D: EXPLAIN으로 후보 탐색 인덱스 및 PK 접근 확인 | 통과 | 통과: 여러 ID locking read |
+| 즉시 마감 동시 요청: 확정 1건, 두 번째 요청 VOTE_NOT_OPEN | - | 통과 |
 | 서비스 SQL 계약: 후보 탐색은 ID-only consistent read, 이후 PK-only locking read | 실패: 조건 검색에 FOR UPDATE | 통과 |
 
 A는 PK 잠금을 먼저 보유해 두 요청을 대기시키고, MySQL lock wait 두 건을 확인한 뒤 잠금을 해제한다.

@@ -3,6 +3,7 @@ package com.menusolomon.vote.integration;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
+import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.restaurant.domain.Restaurant;
 import com.menusolomon.restaurant.repository.RestaurantRepository;
 import com.menusolomon.team.domain.*;
@@ -109,6 +110,33 @@ public class VoteSettlementMySqlTest {
                 return List.of(first, second);
             });
             for (var request : requests) request.get(15, TimeUnit.SECONDS);
+        }
+        assertThat(probe.decisionCount(voteId)).isEqualTo(1);
+        assertThat(sessions.findById(voteId).orElseThrow().getStatus()).isEqualTo(VoteStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("동시에 즉시 마감하면 확정 결과는 하나이고 두 번째 요청은 VOTE_NOT_OPEN으로 거절된다")
+    void concurrentImmediateClose_createsOneDecision() throws Exception {
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            var vote = sessions.findForUpdate(voteId).orElseThrow();
+            vote.restart(vote.getCreatedByTeamMemberId(), NOW);
+        });
+        var ready = new CountDownLatch(2); var start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var requests = new TransactionTemplate(transactions).execute(tx -> {
+                sessions.findForUpdate(voteId).orElseThrow();
+                Callable<String> action = () -> {
+                    ready.countDown(); await(start);
+                    try { service.closeVote(teamId, voteId, "creator"); return "OK"; }
+                    catch (BusinessException exception) { return exception.getErrorCode().name(); }
+                };
+                var first = pool.submit(action); var second = pool.submit(action);
+                await(ready); start.countDown(); awaitDatabaseLockWait(2);
+                return List.of(first, second);
+            });
+            assertThat(List.of(requests.getFirst().get(15, TimeUnit.SECONDS), requests.getLast().get(15, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder("OK", "VOTE_NOT_OPEN");
         }
         assertThat(probe.decisionCount(voteId)).isEqualTo(1);
         assertThat(sessions.findById(voteId).orElseThrow().getStatus()).isEqualTo(VoteStatus.CONFIRMED);
