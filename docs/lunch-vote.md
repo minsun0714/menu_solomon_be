@@ -456,9 +456,9 @@ FK는 Long scalar ID. JPA 관계 매핑은 사용하지 않는다.
 예시 적용 순서(먼저 별도 백업 필요):
 
 ```sh
-docker compose stop app
-docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot "$MYSQL_DATABASE"' < docs/migrations/20261004-vote-ui-contract.sql
-docker compose up --build -d app
+docker compose -f compose-dev.yml stop app
+docker compose -f compose-dev.yml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot "$MYSQL_DATABASE"' < docs/migrations/20261004-vote-ui-contract.sql
+docker compose -f compose-dev.yml up --build -d app
 ```
 
 Hibernate update가 이미 새 테이블과 name 컬럼을 만들었지만 예전 `title NOT NULL`이 남아 있는
