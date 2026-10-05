@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class VoteDomainTest {
     private static final Instant NOW = Instant.parse("2026-10-04T04:00:00Z");
@@ -62,6 +63,35 @@ class VoteDomainTest {
     void patch_invalidName_isRejected(String name) {
         assertThatThrownBy(() -> session().update(name, null, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VALIDATION_ERROR);
     }
+    @ParameterizedTest
+    @EnumSource(VoteStatus.class)
+    @DisplayName("마감 시간이 지난 투표는 상태와 관계없이 이름만 변경할 수 있다")
+    void expiredVote_canChangeNameWithoutChangingDeadlineOrStatus(VoteStatus status) {
+        var vote = session();
+        Instant deadline = vote.getClosesAt();
+        if (status != VoteStatus.OPEN) vote.close(deadline);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        vote.update("변경된 이름", null, deadline.plusSeconds(1));
+        assertThat(vote.getName()).isEqualTo("변경된 이름");
+        assertThat(vote.getClosesAt()).isEqualTo(deadline);
+        assertThat(vote.getStatus()).isEqualTo(status);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = VoteStatus.class, names = {"CLOSED", "CONFIRMED"})
+    @DisplayName("마감된 투표의 이름과 종료 시간을 함께 변경하면 전체 변경을 거절한다")
+    void closedVote_cannotChangeDeadlineEvenWithNewName(VoteStatus status) {
+        var vote = session();
+        Instant deadline = vote.getClosesAt();
+        vote.close(deadline);
+        if (status == VoteStatus.CONFIRMED) vote.confirm();
+        ErrorCode expected = status == VoteStatus.CONFIRMED ? ErrorCode.VOTE_ALREADY_CONFIRMED : ErrorCode.VOTE_NOT_OPEN;
+        assertThatThrownBy(() -> vote.update("새 이름", deadline.plusSeconds(60), deadline))
+                .hasFieldOrPropertyWithValue("errorCode", expected);
+        assertThat(vote.getName()).isNull();
+        assertThat(vote.getClosesAt()).isEqualTo(deadline);
+    }
+
     @Test void deadlineBoundary_closesAtIsNotOpen() {
         var vote = session();
         assertThat(vote.isDue(vote.getClosesAt())).isTrue();
@@ -78,10 +108,10 @@ class VoteDomainTest {
     @Test void creatorOnlyBehavior_rejectsOtherMember() {
         assertThatThrownBy(() -> session().restart(3L, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_CREATOR_REQUIRED);
     }
-    @Test void confirmedVote_cannotRestartOrChange() {
+    @Test void confirmedVote_cannotRestartOrChangeDeadline() {
         var vote = session(); vote.close(NOW.plusSeconds(10800)); vote.confirm();
         assertThatThrownBy(() -> vote.restart(2L, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_ALREADY_CONFIRMED);
-        assertThatThrownBy(() -> vote.update("새 이름", null, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_ALREADY_CONFIRMED);
+        assertThatThrownBy(() -> vote.update(null, NOW.plusSeconds(14400), NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VOTE_ALREADY_CONFIRMED);
         vote.removeDecision(2L); assertThat(vote.getStatus()).isEqualTo(VoteStatus.CLOSED);
     }
     @Test void singlePositiveLeader_isAutomaticWinner() {

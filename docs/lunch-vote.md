@@ -155,13 +155,13 @@ myBallotCandidateIds는 현재 팀원 선택 전체이며 없으면 빈 배열�
 
 ### PATCH `/votes/{voteId}` — 이름·종료 시간 수정
 
-모든 ACTIVE 팀원, OPEN·마감 전. `200`, data=VoteSession.
+모든 ACTIVE 팀원. `200`, data=VoteSession. 이름만 변경하는 요청은 OPEN·CLOSED·CONFIRMED 모두 가능하며, 마감 시간이 지나도 허용한다. 종료 시간 변경은 OPEN·마감 전에서만 가능하다.
 
 ```json
 { "name": "금요일 점심 투표", "closesAt": "2026-10-04T08:00:00Z" }
 ```
 
-부분 수정: 미전송 필드 유지. name은 blank 불가·최대 40자. closesAt은 현재 시각 이후.
+부분 수정: 미전송 필드 유지. name은 blank 불가·최대 40자. closesAt은 현재 시각 이후. 마감/확정 상태에서 이름과 종료 시간을 함께 보내면 요청 전체를 거절하고 이름도 변경하지 않는다. 이름 변경은 상태·종료 시간·확정 결과를 유지한다.
 빈 요청, 명시적 null, 잘못된 타입/시간은 `400 VALIDATION_ERROR`.
 
 생성·마감 시간 수정 요청의 `closesAt`은 서버가 처리하는 시점보다 미래여야 한다.
@@ -383,7 +383,8 @@ view 필수 WEEK/MONTH. WEEK에는 date, MONTH에는 month가 필수이며 다�
 | --- | --- | --- |
 | 생성 | ACTIVE 팀원 | 제한 없음 |
 | 조회 | ACTIVE 팀원 | 전체 |
-| 이름·시간 수정, 후보 추가·삭제, 참여 변경 | ACTIVE 팀원 | OPEN·마감 전 |
+| 이름 수정 | ACTIVE 팀원 | OPEN·CLOSED·CONFIRMED |
+| 종료 시간 수정, 후보 추가·삭제, 참여 변경 | ACTIVE 팀원 | OPEN·마감 전 |
 | 투표 삭제 | ACTIVE 팀원 | 전체 |
 | 참여 상태 변경 | ACTIVE 팀원, 다른 팀원 대상 가능 | OPEN·마감 전 |
 | 복수 선택 저장·취소 | 참여 중인 본인 | OPEN·마감 전 |
