@@ -11,3 +11,12 @@ spring:
 
 kakao:
   rest-api-key: "${KAKAO_REST_API_KEY}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
