@@ -15,6 +15,7 @@ import jakarta.servlet.http.Cookie;
 import java.time.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,29 @@ class VoteControllerTest {
                 .andExpect(jsonPath("$.data.name").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.closesAt").value(DEADLINE.toString()));
     }
+    @ParameterizedTest
+    @ValueSource(strings = {"POST", "PATCH"})
+    @DisplayName("투표 생성과 시간 수정의 마감 시간 오류는 closesAt 필드 안내를 포함한 400 ProblemDetail이다")
+    void closingTimeValidation_returnsFieldErrorForCreateAndUpdate(String method) throws Exception {
+        if (method.equals("POST")) {
+            when(service.createVote(1L, "token", null, NOW)).thenThrow(new VoteClosingTimeException());
+        } else {
+            when(service.updateVote(1L, 5L, "token", new VoteUpdateRequest(null, NOW)))
+                    .thenThrow(new VoteClosingTimeException());
+        }
+        String path = method.equals("POST") ? ROOT : VOTE;
+        var request = method.equals("POST") ? post(path) : patch(path);
+        mvc.perform(request.cookie(cookie()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"closesAt\":\"" + NOW + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.detail").value("마감 시간은 현재 시각 이후여야 합니다."))
+                .andExpect(jsonPath("$.instance").value(path))
+                .andExpect(jsonPath("$.fieldErrors.closesAt").value("선택한 마감 시간이 지났습니다. 다시 설정해 주세요."));
+    }
+
     @ParameterizedTest @ValueSource(strings={"name","title"})
     void create_acceptsCanonicalNameAndFrontendTitleAlias(String field) throws Exception {
         var named=session(); named.update("asf",null,NOW);
