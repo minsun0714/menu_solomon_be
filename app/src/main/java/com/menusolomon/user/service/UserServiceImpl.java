@@ -61,6 +61,14 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public User updateNickname(String rawSessionToken, String nickname) {
+        User user = getBySessionToken(rawSessionToken);
+        user.changeNickname(nickname, Instant.now(clock));
+        return user;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<User> findBySessionToken(String rawSessionToken) {
         if (rawSessionToken == null || rawSessionToken.isBlank()) {

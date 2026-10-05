@@ -178,4 +178,34 @@ class UserServiceImplTest {
         assertThat(session.issuedToken()).isNotEqualTo("test").hasSizeGreaterThanOrEqualTo(32);
         assertThat(session.user().getAnonymousTokenHash()).isNotEqualTo(TOKEN_HASH);
     }
+    @Test
+    @DisplayName("닉네임 변경은 기존 사용자의 이름과 갱신 시각만 변경한다")
+    void updateNickname_existingSession_updatesSameUser() {
+        User existing = User.create(TOKEN_HASH, "기존이름", NOW.minusSeconds(60));
+        when(userRepository.findByAnonymousTokenHash(TOKEN_HASH)).thenReturn(Optional.of(existing));
+        assertThat(userService.updateNickname("test", "  익명4d88d  ")).isSameAs(existing);
+        assertThat(existing.getNickname()).isEqualTo("익명4d88d");
+        assertThat(existing.getUpdatedAt()).isEqualTo(NOW);
+        assertThat(existing.getCreatedAt()).isEqualTo(NOW.minusSeconds(60));
+        assertThat(existing.getAnonymousTokenHash()).isEqualTo(TOKEN_HASH);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("유효하지 않은 세션의 닉네임 변경은 새 사용자 생성 없이 거절한다")
+    void updateNickname_unknownSession_doesNotCreateUser() {
+        when(userRepository.findByAnonymousTokenHash(TOKEN_HASH)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> userService.updateNickname("test", "새이름"))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REQUIRED);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("쿠키 없는 닉네임 변경은 사용자 저장소에 접근하지 않는다")
+    void updateNickname_missingSession_doesNotAccessRepository() {
+        assertThatThrownBy(() -> userService.updateNickname(null, "새이름"))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REQUIRED);
+        verifyNoInteractions(userRepository);
+    }
+
 }

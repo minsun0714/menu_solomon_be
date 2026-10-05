@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "Request validation failed"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
     SESSION_REQUIRED(HttpStatus.UNAUTHORIZED, "A valid session is required"),
     NOT_TEAM_MEMBER(HttpStatus.FORBIDDEN, "팀원만 사용할 수 있습니다."),
     ADMIN_REQUIRED(HttpStatus.FORBIDDEN, "팀 관리자 권한이 필요합니다."),

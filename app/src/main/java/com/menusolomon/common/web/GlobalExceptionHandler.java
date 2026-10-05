@@ -3,6 +3,7 @@ package com.menusolomon.common.web;
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
 import java.util.Map;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,15 @@ public class GlobalExceptionHandler {
             org.springframework.web.method.annotation.HandlerMethodValidationException.class})
     public ResponseEntity<ProblemDetail> handleInvalidParameter(Exception exception) {
         return problem(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getDetail(), null);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ProblemDetail> handleMethodNotAllowed(HttpRequestMethodNotSupportedException exception) {
+        var response = problem(ErrorCode.METHOD_NOT_ALLOWED, ErrorCode.METHOD_NOT_ALLOWED.getDetail(), null);
+        var headers = new HttpHeaders();
+        headers.putAll(response.getHeaders());
+        if (exception.getSupportedHttpMethods() != null) headers.setAllow(exception.getSupportedHttpMethods());
+        return new ResponseEntity<>(response.getBody(), headers, HttpStatus.METHOD_NOT_ALLOWED);
     }
 
     @ExceptionHandler(BusinessException.class)

@@ -14,6 +14,8 @@ public interface UserService {
     /** Resolves an existing identity without creating a user; unknown tokens require a session. */
     User getBySessionToken(String rawSessionToken);
 
+    User updateNickname(String rawSessionToken, String nickname);
+
     /** Optional identity for public reads; never creates a user. */
     Optional<User> findBySessionToken(String rawSessionToken);
 }
