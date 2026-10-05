@@ -201,6 +201,19 @@ class VoteServiceImplTest {
         when(candidates.findTally(5L)).thenReturn(List.of(new VoteTally.Entry(100L,3L,0)));
         service.settleExpired(5L); assertThat(vote.getStatus()).isEqualTo(VoteStatus.CLOSED); verifyNoInteractions(decisions);
     }
+    @Test
+    @DisplayName("마감된 투표의 생성자는 0표인 단독 후보를 수동 확정할 수 있다")
+    void manualDecision_singleCandidateWithoutBallots_confirmsManually() {
+        var vote = scoped(); vote.close(DEADLINE);
+        when(candidates.findTally(5L)).thenReturn(List.of(new VoteTally.Entry(100L, 3L, 0)));
+        when(decisions.saveAndFlush(any())).thenAnswer(invocation -> id(invocation.getArgument(0), 7L));
+        var result = service.createDecision(1L, 5L, "token", 3L);
+        assertThat(result.confirmationType()).isEqualTo(ConfirmationType.MANUAL);
+        assertThat(vote.getStatus()).isEqualTo(VoteStatus.CONFIRMED);
+        verify(decisions).saveAndFlush(argThat(decision -> decision.getRestaurantId().equals(3L)
+                && decision.getConfirmedByTeamMemberId().equals(member.getId())));
+    }
+
     @Test void manualDecision_onlyCreatorAndTiedLeaderAllowed() {
         var vote=scoped(); vote.close(DEADLINE);
         when(candidates.findTally(5L)).thenReturn(List.of(new VoteTally.Entry(100L,3L,1),new VoteTally.Entry(200L,4L,1)));

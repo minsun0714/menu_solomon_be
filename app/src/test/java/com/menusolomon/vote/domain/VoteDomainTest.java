@@ -5,6 +5,7 @@ import com.menusolomon.common.exception.ErrorCode;
 import java.time.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -69,10 +70,29 @@ class VoteDomainTest {
         assertThatThrownBy(() -> tally.requireManualCandidate(30L)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_DECISION_CANDIDATE);
         assertThat(tally.percentage(2)).isEqualTo(100);
     }
-    @Test void noBallots_doesNotAutomaticallyOrManuallyConfirm() {
+    @Test
+    @DisplayName("후보가 하나이고 0표이면 자동 확정하지 않지만 해당 후보의 수동 확정은 허용한다")
+    void singleCandidateWithoutBallots_allowsManualDecisionOnly() {
         var tally = new VoteTally(List.of(new VoteTally.Entry(1L, 10L, 0)), 0);
         assertThat(tally.automaticWinner()).isEmpty(); assertThat(tally.percentage(0)).isZero();
-        assertThatThrownBy(() -> tally.requireManualCandidate(10L)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_DECISION_CANDIDATE);
+        assertThatCode(() -> tally.requireManualCandidate(10L)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> tally.requireManualCandidate(20L))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_DECISION_CANDIDATE);
+    }
+    @Test
+    @DisplayName("후보가 없으면 수동 확정할 수 없다")
+    void noCandidates_rejectsManualDecision() {
+        var tally = new VoteTally(List.of(), 0);
+        assertThatThrownBy(() -> tally.requireManualCandidate(10L))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_DECISION_CANDIDATE);
+    }
+    @Test
+    @DisplayName("득표한 단독 후보는 기존 자동 확정 정책을 따른다")
+    void singlePositiveCandidate_remainsAutomaticWinner() {
+        var tally = new VoteTally(List.of(new VoteTally.Entry(1L, 10L, 1)), 1);
+        assertThat(tally.automaticWinner()).isPresent();
+        assertThatThrownBy(() -> tally.requireManualCandidate(10L))
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_DECISION_CANDIDATE);
     }
     @Test void noBallots_withMultipleTiedCandidates_allowsCreatorManualSelection() {
         var tally = new VoteTally(List.of(new VoteTally.Entry(1L, 10L, 0), new VoteTally.Entry(2L, 20L, 0)), 0);

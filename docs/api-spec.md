@@ -389,7 +389,7 @@ Base path는 `/api/teams/{teamId}`다.
 | PUT | /votes/{voteId}/ballots/me | 200 | candidateIds 배열로 내 복수 선택 전체 교체 |
 | DELETE | /votes/{voteId}/ballots/me | 204 | 내 투표 전체 취소 |
 | GET | /votes/{voteId}/results | 200 | 득표·고유 투표자 기준 득표율·ballot 전체 |
-| POST | /votes/{voteId}/decision | 201 | 생성자가 CLOSED 공동 최다 후보 중 확정 |
+| POST | /votes/{voteId}/decision | 201 | 생성자가 CLOSED 공동 최다 후보 또는 단독 0표 후보를 확정 |
 | PATCH | /votes/{voteId}/decision | 200 | 생성자가 후보 식당으로 확정 수정 |
 | DELETE | /votes/{voteId}/decision | 204 | 생성자가 확정 삭제·CLOSED 전환 |
 | GET | /lunch-history?view=WEEK&date=2026-10-04 | 200 | 한국 시간, 월요일 시작 |
@@ -401,7 +401,7 @@ name/title을 보내면 blank 불가·최대 40자이며, 생략/null이면 null
 closesAt은 필수이며 서버 현재 시각보다 이후여야 한다.
 
 상태는 OPEN/CLOSED/CONFIRMED. 스케줄러와 목록·상세·결과 조회에서 마감 정산한다.
-단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED.
+단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED. 후보가 정확히 하나이고 0표이면 생성자가 해당 후보를 수동 확정할 수 있다.
 복수 선택은 후보별 행으로 저장하며 `(session_id, candidate_id, team_member_id)` UNIQUE를 사용한다.
 기존 MySQL 스키마 전환 절차는 상세 명세와 [전환 SQL](migrations/20261004-vote-ui-contract.sql)에 있다.
 
