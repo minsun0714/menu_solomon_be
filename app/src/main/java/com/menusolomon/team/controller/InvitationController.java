@@ -6,6 +6,9 @@ import com.menusolomon.common.web.SessionCookies;
 import com.menusolomon.team.dto.InvitationPreviewResponse;
 import com.menusolomon.team.dto.TeamJoinResponse;
 import com.menusolomon.team.dto.TeamJoinResult;
+import com.menusolomon.team.dto.TeamJoinRequest;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestBody;
 import com.menusolomon.team.service.TeamService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,9 +40,10 @@ public class InvitationController {
     @PostMapping("/{inviteToken}/join")
     public ResponseEntity<ApiResponse<TeamJoinResponse>> joinTeam(
             @PathVariable String inviteToken,
-            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String rawSessionToken
+            @CookieValue(value = WebConstants.SESSION_COOKIE_NAME, required = false) String rawSessionToken,
+            @Valid @RequestBody(required = false) TeamJoinRequest request
     ) {
-        TeamJoinResult result = teamService.joinTeam(inviteToken, rawSessionToken);
+        TeamJoinResult result = teamService.joinTeam(inviteToken, rawSessionToken, request == null ? null : request.nickname());
         HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).headers(SessionCookies.headers(result.issuedToken()))
                 .body(ApiResponse.of(result.membership()));

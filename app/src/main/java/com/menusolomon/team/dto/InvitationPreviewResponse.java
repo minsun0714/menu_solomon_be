@@ -8,6 +8,7 @@ public record InvitationPreviewResponse(
         String description,
         long memberCount,
         boolean isAlreadyMember,
+        String suggestedNickname,
         List<InvitationMemberResponse> members
 ) {
 }

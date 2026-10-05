@@ -147,28 +147,31 @@ public class TeamServiceImpl implements TeamService {
         Map<Long, User> users = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, Function.identity()));
         List<InvitationMemberResponse> profiles = members.stream().map(member -> profile(member, users)).toList();
-        boolean isAlreadyMember = userService.findBySessionToken(rawSessionToken)
+        var currentUser = userService.findBySessionToken(rawSessionToken);
+        boolean isAlreadyMember = currentUser
                 .map(user -> members.stream().anyMatch(member -> member.getUserId().equals(user.getId())))
                 .orElse(false);
         return new InvitationPreviewResponse("team_" + team.getId(), team.getName(), team.getDescription(),
-                members.size(), isAlreadyMember, profiles);
+                members.size(), isAlreadyMember, currentUser.map(User::getNickname).orElseGet(User::suggestNickname), profiles);
     }
 
     @Override
     @Transactional
-    public TeamJoinResult joinTeam(String inviteToken, String rawSessionToken) {
+    public TeamJoinResult joinTeam(String inviteToken, String rawSessionToken, String nickname) {
         Team team = findInvitationTeam(inviteToken);
         var session = userService.getOrCreateSession(rawSessionToken);
         User user = session.user();
         Instant now = Instant.now(clock);
         return teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId())
                 .map(member -> {
+                    if (!member.isActive() && nickname != null) user.changeNickname(nickname, now);
                     member.joinIfInactive(now);
-                    return new TeamJoinResult(membership(member), false, session.issuedToken());
+                    return new TeamJoinResult(membership(member, user), false, session.issuedToken());
                 })
                 .orElseGet(() -> {
+                    if (nickname != null) user.changeNickname(nickname, now);
                     TeamMember member = teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), now));
-                    return new TeamJoinResult(membership(member), true, session.issuedToken());
+                    return new TeamJoinResult(membership(member, user), true, session.issuedToken());
                 });
     }
 
@@ -277,9 +280,9 @@ public class TeamServiceImpl implements TeamService {
                 new InvitationUserResponse("user_" + user.getId(), user.getNickname()));
     }
 
-    private TeamJoinResponse membership(TeamMember member) {
+    private TeamJoinResponse membership(TeamMember member, User user) {
         return new TeamJoinResponse("member_" + member.getId(), "team_" + member.getTeamId(),
-                "user_" + member.getUserId(), member.getRole().name(), member.getJoinedAt());
+                "user_" + member.getUserId(), user.getNickname(), member.getRole().name(), member.getJoinedAt());
     }
 
     private String newInviteToken() {

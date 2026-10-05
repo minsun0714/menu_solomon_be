@@ -19,6 +19,8 @@ import com.menusolomon.team.dto.TeamCreateResponse;
 import com.menusolomon.team.dto.TeamCreateResult;
 import com.menusolomon.team.dto.TeamJoinResponse;
 import com.menusolomon.team.dto.TeamJoinResult;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import com.menusolomon.team.service.TeamService;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
@@ -100,6 +102,7 @@ class TeamApiControllerTest {
         mockMvc.perform(get("/api/invitations/invite-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isAlreadyMember").value(false))
+                .andExpect(jsonPath("$.data.suggestedNickname").value("익명abc123"))
                 .andExpect(result -> org.assertj.core.api.Assertions.assertThat(
                         result.getResponse().getHeader("Set-Cookie")
                 ).isNull());
@@ -122,7 +125,7 @@ class TeamApiControllerTest {
 
     @Test
     void join_newMember_returns201() throws Exception {
-        when(teamService.joinTeam("invite-token", SESSION_TOKEN))
+        when(teamService.joinTeam("invite-token", SESSION_TOKEN, null))
                 .thenReturn(joinResult(true));
 
         mockMvc.perform(post("/api/invitations/invite-token/join").cookie(sessionCookie()))
@@ -133,7 +136,7 @@ class TeamApiControllerTest {
 
     @Test
     void join_existingMember_returns200() throws Exception {
-        when(teamService.joinTeam("invite-token", SESSION_TOKEN))
+        when(teamService.joinTeam("invite-token", SESSION_TOKEN, null))
                 .thenReturn(joinResult(false));
 
         mockMvc.perform(post("/api/invitations/invite-token/join").cookie(sessionCookie()))
@@ -143,7 +146,7 @@ class TeamApiControllerTest {
 
     @Test
     void join_reactivatedMember_returns200() throws Exception {
-        when(teamService.joinTeam("invite-token", SESSION_TOKEN))
+        when(teamService.joinTeam("invite-token", SESSION_TOKEN, null))
                 .thenReturn(joinResult(false));
 
         mockMvc.perform(post("/api/invitations/invite-token/join").cookie(sessionCookie()))
@@ -172,7 +175,7 @@ class TeamApiControllerTest {
     @Test
     void join_withoutCookie_issuesSessionCookieAndReturns201() throws Exception {
         String issuedToken = "j".repeat(43);
-        when(teamService.joinTeam("invite-token", null)).thenReturn(new TeamJoinResult(
+        when(teamService.joinTeam("invite-token", null, null)).thenReturn(new TeamJoinResult(
                 joinResult(true).membership(), true, issuedToken
         ));
 
@@ -182,12 +185,12 @@ class TeamApiControllerTest {
                 .andExpect(jsonPath("$.data.issuedToken").doesNotExist())
                 .andExpect(result -> assertSessionCookie(result, issuedToken));
 
-        verify(teamService).joinTeam("invite-token", null);
+        verify(teamService).joinTeam("invite-token", null, null);
     }
 
     @Test
     void join_existingSession_doesNotReplaceCookie() throws Exception {
-        when(teamService.joinTeam("invite-token", SESSION_TOKEN)).thenReturn(joinResult(false));
+        when(teamService.joinTeam("invite-token", SESSION_TOKEN, null)).thenReturn(joinResult(false));
 
         mockMvc.perform(post("/api/invitations/invite-token/join").cookie(sessionCookie()))
                 .andExpect(status().isOk())
@@ -196,13 +199,37 @@ class TeamApiControllerTest {
 
     @Test
     void join_invalidInvitation_doesNotIssueCookie() throws Exception {
-        when(teamService.joinTeam("invalid-token", null))
+        when(teamService.joinTeam("invalid-token", null, null))
                 .thenThrow(new BusinessException(ErrorCode.INVITATION_NOT_FOUND));
 
         mockMvc.perform(post("/api/invitations/invalid-token/join"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().doesNotExist("Set-Cookie"));
+    }
+
+    @Test
+    void join_withNickname_trimsInputAndReturnsFinalNickname() throws Exception {
+        when(teamService.joinTeam("invite-token", SESSION_TOKEN, "익명abc123")).thenReturn(joinResult(true));
+        mockMvc.perform(post("/api/invitations/invite-token/join").cookie(sessionCookie())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"  익명abc123  \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.nickname").value("익명abc123"));
+        verify(teamService).joinTeam("invite-token", SESSION_TOKEN, "익명abc123");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"nickname\":null}", "{\"nickname\":\" \"}",
+            "{\"nickname\":\"a\"}", "{\"nickname\":\"1234567890123\"}",
+            "{\"nickname\":\"ab\\nc\"}"})
+    void join_invalidNickname_returns400WithFieldError(String body) throws Exception {
+        mockMvc.perform(post("/api/invitations/invite-token/join")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.nickname").exists());
+        org.mockito.Mockito.verifyNoInteractions(teamService);
     }
 
     private void assertSessionCookie(org.springframework.test.web.servlet.MvcResult result, String token) {
@@ -228,6 +255,7 @@ class TeamApiControllerTest {
                 "",
                 1,
                 isAlreadyMember,
+                "익명abc123",
                 List.of(new InvitationMemberResponse(
                         "member_1",
                         "ADMIN",
@@ -243,6 +271,7 @@ class TeamApiControllerTest {
                         "member_2",
                         "team_1",
                         "user_2",
+                        "익명abc123",
                         "MEMBER",
                         Instant.parse("2026-10-04T08:30:00Z")
                 ),

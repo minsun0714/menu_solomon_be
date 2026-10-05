@@ -1,5 +1,7 @@
 package com.menusolomon.user.domain;
 
+import com.menusolomon.common.exception.BusinessException;
+import com.menusolomon.common.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -45,7 +47,21 @@ public class User {
         return new User(anonymousTokenHash, nickname, now);
     }
 
+    public static String suggestNickname() {
+        return "익명" + UUID.randomUUID().toString().replace("-", "").substring(0, 6);
+    }
+
+    public void changeNickname(String nickname, Instant now) {
+        String normalized = nickname == null ? null : nickname.strip();
+        if (normalized == null || normalized.isBlank() || normalized.length() < 2
+                || normalized.length() > 12 || nickname.codePoints().anyMatch(Character::isISOControl)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
+        this.nickname = normalized;
+        this.updatedAt = now;
+    }
+
     public static User createAnonymous(String anonymousTokenHash, Instant now) {
-        return new User(anonymousTokenHash, "익명 사용자 " + UUID.randomUUID(), now);
+        return new User(anonymousTokenHash, suggestNickname(), now);
     }
 }
