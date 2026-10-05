@@ -20,6 +20,7 @@ import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -72,6 +73,32 @@ class VoteServiceImplTest {
     @Test void createVote_nonMember_isRejectedWithoutSaving() {
         error(() -> service.createVote(1L,"token",null,DEADLINE),ErrorCode.NOT_TEAM_MEMBER); verifyNoInteractions(sessions);
     }
+    @Test
+    @DisplayName("팀 투표 정산은 후보 ID 탐색 후 PK 잠금을 획득하고 이미 확정된 투표는 건너뛴다")
+    void getVotes_rechecksLatestStateAfterPrimaryLock() {
+        identity();
+        var vote = id(LunchVoteSession.create(1L, 1L, NOW.minusSeconds(1), NOW.minusSeconds(10)), 5L);
+        vote.close(NOW); vote.confirm();
+        when(sessions.findDueIdsForTeam(1L, NOW)).thenReturn(List.of(5L));
+        when(sessions.findAllForUpdate(List.of(5L))).thenReturn(List.of(vote));
+
+        assertThat(service.getVotes(1L, "token")).isEmpty();
+
+        var order = inOrder(sessions);
+        order.verify(sessions).findDueIdsForTeam(1L, NOW);
+        order.verify(sessions).findAllForUpdate(List.of(5L));
+        order.verify(sessions).flush();
+        verifyNoInteractions(candidates, decisions);
+    }
+
+    @Test
+    @DisplayName("만료 후보 ID가 없으면 팀 투표 목록에서 잠금 조회를 하지 않는다")
+    void getVotes_withoutDueIds_doesNotAcquireLocks() {
+        identity();
+        assertThat(service.getVotes(1L, "token")).isEmpty();
+        verify(sessions, never()).findAllForUpdate(any());
+    }
+
     @Test void getVotes_usesDistinctVoterCountAndAllMyCandidates() {
         identity(); when(sessions.findSummaries(1L)).thenReturn(List.of(new VoteSummaryRow(5L,1L,null,1L,"익명",VoteStatus.OPEN,DEADLINE,NOW,2,3,1)));
         when(ballots.findAllBySessionIdInAndTeamMemberIdOrderById(List.of(5L),1L)).thenReturn(List.of(VoteRecord.create(5L,1L,100L,NOW),VoteRecord.create(5L,1L,200L,NOW)));
