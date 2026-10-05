@@ -57,6 +57,25 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 { "data": { "id": "user_1", "nickname": "익명 사용자 1234" } }
 ```
 
+### PATCH `/session/me`
+
+현재 세션 사용자의 공통 닉네임을 변경한다. 성공: `200`.
+
+```json
+{ "nickname": "익명4d88d" }
+```
+
+- nickname 필수. 앞뒤 공백 제거 후 2~12자이며 blank·제어문자·줄바꿈은 금지한다.
+- 기존 사용자의 ID/세션은 유지한다. 새 User나 쿠키는 발급하지 않는다.
+- 변경한 이름은 참여 중인 모든 팀의 팀원·리뷰·투표 작성자 조회에 반영된다.
+- 유효한 세션이 없으면 `401 SESSION_REQUIRED`.
+- 검증 실패는 `400 VALIDATION_ERROR` ProblemDetail 및 `fieldErrors.nickname`.
+- `/session/me`에서 지원하지 않는 메서드는 `405 METHOD_NOT_ALLOWED` ProblemDetail과 Allow 헤더를 반환한다.
+
+```json
+{ "data": { "id": "user_1", "nickname": "익명4d88d" } }
+```
+
 ## 3. 팀과 초대
 
 ### GET `/teams`
