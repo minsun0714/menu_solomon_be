@@ -13,7 +13,9 @@ public record VoteTally(List<Entry> entries, long voterCount) {
     }
     public void requireManualCandidate(Long restaurantId) {
         var leaders = leaders();
-        if (leaders.size() < 2 || leaders.stream().noneMatch(entry -> entry.restaurantId().equals(restaurantId)))
+        boolean singleUnvotedCandidate = entries.size() == 1 && entries.getFirst().votes() == 0;
+        if ((!singleUnvotedCandidate && leaders.size() < 2)
+                || leaders.stream().noneMatch(entry -> entry.restaurantId().equals(restaurantId)))
             throw new BusinessException(ErrorCode.INVALID_DECISION_CANDIDATE);
     }
     public double percentage(long votes) { return voterCount == 0 ? 0 : 100.0 * votes / voterCount; }
