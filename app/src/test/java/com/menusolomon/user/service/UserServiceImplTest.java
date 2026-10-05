@@ -69,7 +69,7 @@ class UserServiceImplTest {
         verify(userRepository).save(captor.capture());
         assertThat(result).isSameAs(captor.getValue());
         assertThat(result.getAnonymousTokenHash()).isEqualTo(TOKEN_HASH).isNotEqualTo("test");
-        assertThat(result.getNickname()).startsWith("익명 사용자 ");
+        assertThat(result.getNickname()).matches("익명[0-9a-f]{6}");
         assertThat(result.getCreatedAt()).isEqualTo(NOW);
         assertThat(result.getUpdatedAt()).isEqualTo(NOW);
     }

@@ -150,22 +150,31 @@ Set-Cookie: menu_solomon_session={token}; Path=/; Max-Age=31536000; Expires=...;
 {
   "data": {
     "teamId": "team_1", "name": "솔로몬 개발팀", "description": "점심 메뉴를 함께 정해요",
-    "memberCount": 1, "isAlreadyMember": false,
+    "memberCount": 1, "isAlreadyMember": false, "suggestedNickname": "익명a1b2c3",
     "members": [{ "id": "member_1", "role": "ADMIN", "joinedAt": "2026-10-04T04:00:00Z", "user": { "id": "user_1", "nickname": "익명 사용자 1234" } }]
   }
 }
 ```
 
 팀원 목록/개수는 ACTIVE 기준. 유효한 기존 세션이 있으면 `isAlreadyMember`를 계산하며 없으면 false.
+기존 세션 사용자는 현재 닉네임을 `suggestedNickname`으로 반환한다. 세션이 없으면 짧은 랜덤 닉네임(예: `익명a1b2c3`)을 추천하며 User/세션을 생성하지 않는다. FE는 최초 응답으로 입력창을 초기화하고 사용자가 수정한 값을 가입 요청으로 보낸다. 추천값은 재조회 시 달라질 수 있다.
 무효·재발급된 토큰: `404 INVITATION_NOT_FOUND`.
 
 ### POST `/invitations/{inviteToken}/join`
 
-본문 없음. 필요 시 세션 자동 발급. 새 멤버 생성: `201`, 기존 멤버: `200`.
-기존 ACTIVE 멤버의 중복 요청은 멱등 처리한다. 탈퇴 멤버는 기존 멤버 행을 MEMBER로 재활성화하며 `200`을 반환한다.
+선택 JSON 본문:
 
 ```json
-{ "data": { "id": "member_2", "teamId": "team_1", "userId": "user_2", "role": "MEMBER", "joinedAt": "2026-10-04T04:00:00Z" } }
+{ "nickname": "수달4821" }
+```
+
+본문을 보내면 `nickname`은 필수이며 앞뒤 공백 제거 후 2~12자, blank·제어문자·줄바꿈은 금지한다. 오류는 `400 VALIDATION_ERROR` ProblemDetail과 `fieldErrors.nickname`으로 반환한다. 닉네임 중복은 허용한다.
+
+기존 본문 없는 요청도 지원하며 기존 사용자 이름을 유지하거나 짧은 자동 닉네임을 생성한다. 필요 시 세션 자동 발급. 새 멤버 생성: `201`, 기존 멤버: `200`.
+닉네임은 User 공통 값으로 모든 팀에 반영된다. User 생성/닉네임 변경/가입은 하나의 트랜잭션이다. 기존 ACTIVE 멤버의 중복 요청은 멱등 처리하며 닉네임을 변경하지 않는다. 탈퇴 멤버는 기존 멤버 행을 MEMBER로 재활성화하며 `200`을 반환한다.
+
+```json
+{ "data": { "id": "member_2", "teamId": "team_1", "userId": "user_2", "nickname": "수달4821", "role": "MEMBER", "joinedAt": "2026-10-04T04:00:00Z" } }
 ```
 
 오류: `INVITATION_NOT_FOUND`.

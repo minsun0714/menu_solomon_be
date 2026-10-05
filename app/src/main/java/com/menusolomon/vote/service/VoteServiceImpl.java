@@ -86,8 +86,11 @@ public class VoteServiceImpl implements VoteService {
     public List<VoteSummaryResponse> getVotes(Long teamId, String token) {
         var member = requireMember(teamId, token);
         Instant now = Instant.now(clock);
-        // Each due aggregate requires its own state transition under the same lock as mutations.
-        for (var vote : sessions.findDueForTeam(teamId, now)) settle(vote, now);
+
+        var dueIds = sessions.findDueIdsForTeam(teamId, now);
+        if (!dueIds.isEmpty()) {
+            for (var vote : sessions.findAllForUpdate(dueIds)) settle(vote, now);
+        }
         sessions.flush();
         var rows = sessions.findSummaries(teamId);
         Map<Long, List<String>> mine = rows.isEmpty() ? Map.of() : ballots

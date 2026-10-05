@@ -35,7 +35,7 @@ public interface TeamService {
 
     InvitationPreviewResponse getInvitationPreview(String inviteToken, String rawSessionToken);
 
-    TeamJoinResult joinTeam(String inviteToken, String rawSessionToken);
+    TeamJoinResult joinTeam(String inviteToken, String rawSessionToken, String nickname);
     TeamUpdateResponse updateTeam(Long teamId, String rawSessionToken, TeamUpdateRequest request);
     InvitationResponse getInvitation(Long teamId, String rawSessionToken);
     InvitationResponse regenerateInvitation(Long teamId, String rawSessionToken);

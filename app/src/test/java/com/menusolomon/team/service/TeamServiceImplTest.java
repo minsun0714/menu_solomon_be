@@ -189,6 +189,7 @@ class TeamServiceImplTest {
         assertThat(response.teamId()).isEqualTo("team_1");
         assertThat(response.memberCount()).isEqualTo(2);
         assertThat(response.isAlreadyMember()).isFalse();
+        assertThat(response.suggestedNickname()).matches("익명[0-9a-f]{6}");
         assertThat(response.members()).extracting(row -> row.user().nickname()).containsExactly("관리자", "멤버");
         assertThat(response.members().getFirst().user().id()).isEqualTo("user_10");
         verify(userService, never()).getOrCreateBySessionToken(any());
@@ -217,6 +218,7 @@ class TeamServiceImplTest {
 
         assertThat(response.isAlreadyMember()).isFalse();
         assertThat(response.memberCount()).isZero();
+        assertThat(response.suggestedNickname()).isEqualTo("탈퇴자");
         verify(userService, never()).getOrCreateBySessionToken(any());
         verify(userService, never()).getOrCreateSession(any());
     }
@@ -244,9 +246,10 @@ class TeamServiceImplTest {
             return saved;
         });
 
-        var result = teamService.joinTeam("invite-token", TOKEN);
+        var result = teamService.joinTeam("invite-token", TOKEN, "  수달4821  ");
 
         assertThat(result.created()).isTrue();
+        assertThat(result.membership().nickname()).isEqualTo("수달4821");
         assertThat(result.membership().id()).isEqualTo("member_2");
         assertThat(result.membership().teamId()).isEqualTo("team_1");
         assertThat(result.membership().userId()).isEqualTo("user_20");
@@ -262,9 +265,10 @@ class TeamServiceImplTest {
         when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(10L, "hash", "관리자"), null));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 10L)).thenReturn(Optional.of(admin()));
 
-        var result = teamService.joinTeam("invite-token", TOKEN);
+        var result = teamService.joinTeam("invite-token", TOKEN, "다른이름");
 
         assertThat(result.created()).isFalse();
+        assertThat(result.membership().nickname()).isEqualTo("관리자");
         assertThat(result.membership().id()).isEqualTo("member_1");
         assertThat(result.membership().role()).isEqualTo("ADMIN");
         assertThat(result.membership().joinedAt()).isEqualTo(NOW);
@@ -280,9 +284,10 @@ class TeamServiceImplTest {
         when(userService.getOrCreateSession(TOKEN)).thenReturn(new UserSession(user(10L, "hash", "탈퇴자"), null));
         when(teamMemberRepository.findByTeamIdAndUserId(1L, 10L)).thenReturn(Optional.of(former));
 
-        var result = teamService.joinTeam("invite-token", TOKEN);
+        var result = teamService.joinTeam("invite-token", TOKEN, "새이름");
 
         assertThat(result.created()).isFalse();
+        assertThat(result.membership().nickname()).isEqualTo("새이름");
         assertThat(result.membership().id()).isEqualTo("member_1");
         assertThat(result.membership().role()).isEqualTo("MEMBER");
         assertThat(result.membership().joinedAt()).isEqualTo(NOW.plusSeconds(60));
@@ -295,7 +300,7 @@ class TeamServiceImplTest {
     void joinTeam_invalidInvitation_doesNotCreateUserOrMember() {
         when(teamRepository.findByInviteToken("invalid")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> teamService.joinTeam("invalid", TOKEN))
+        assertThatThrownBy(() -> teamService.joinTeam("invalid", TOKEN, null))
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVITATION_NOT_FOUND);
 
         verifyNoInteractions(userService, teamMemberRepository, userRepository);
@@ -334,7 +339,7 @@ class TeamServiceImplTest {
             ReflectionTestUtils.setField(saved, "id", 2L);
             return saved;
         });
-        var result = teamService.joinTeam("invite-token", null);
+        var result = teamService.joinTeam("invite-token", null, null);
         assertThat(result.issuedToken()).isEqualTo("issued-token");
         assertThat(result.created()).isTrue();
     }

@@ -24,9 +24,11 @@ public interface LunchVoteSessionRepository extends JpaRepository<LunchVoteSessi
     Optional<LunchVoteSession> findForUpdate(@Param("id") Long id);
     @Query("select s.id from LunchVoteSession s where s.status = com.menusolomon.vote.domain.VoteStatus.OPEN and s.closesAt <= :now order by s.id")
     List<Long> findDueIds(@Param("now") Instant now, Pageable pageable);
+    @Query("select s.id from LunchVoteSession s where s.teamId = :teamId and s.status = com.menusolomon.vote.domain.VoteStatus.OPEN and s.closesAt <= :now order by s.id")
+    List<Long> findDueIdsForTeam(@Param("teamId") Long teamId, @Param("now") Instant now);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from LunchVoteSession s where s.teamId = :teamId and s.status = com.menusolomon.vote.domain.VoteStatus.OPEN and s.closesAt <= :now order by s.id")
-    List<LunchVoteSession> findDueForTeam(@Param("teamId") Long teamId, @Param("now") Instant now);
+    @Query("select s from LunchVoteSession s where s.id in :ids order by s.id")
+    List<LunchVoteSession> findAllForUpdate(@Param("ids") List<Long> ids);
     @Query("""
         select new com.menusolomon.vote.repository.VoteSummaryRow(s.id, s.teamId, s.name, s.createdByTeamMemberId, u.nickname,
             s.status, s.closesAt, s.createdAt,
