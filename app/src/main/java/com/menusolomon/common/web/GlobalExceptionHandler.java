@@ -2,6 +2,7 @@ package com.menusolomon.common.web;
 
 import com.menusolomon.common.exception.BusinessException;
 import com.menusolomon.common.exception.ErrorCode;
+import com.menusolomon.vote.domain.VoteClosingTimeException;
 import java.util.Map;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import java.util.stream.Collectors;
@@ -33,6 +34,12 @@ public class GlobalExceptionHandler {
         headers.putAll(response.getHeaders());
         if (exception.getSupportedHttpMethods() != null) headers.setAllow(exception.getSupportedHttpMethods());
         return new ResponseEntity<>(response.getBody(), headers, HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    @ExceptionHandler(VoteClosingTimeException.class)
+    public ResponseEntity<ProblemDetail> handleVoteClosingTime(VoteClosingTimeException exception) {
+        return problem(ErrorCode.VALIDATION_ERROR, "마감 시간은 현재 시각 이후여야 합니다.",
+                Map.of("closesAt", "선택한 마감 시간이 지났습니다. 다시 설정해 주세요."));
     }
 
     @ExceptionHandler(BusinessException.class)

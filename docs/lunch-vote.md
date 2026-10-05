@@ -164,6 +164,29 @@ myBallotCandidateIds는 현재 팀원 선택 전체이며 없으면 빈 배열�
 부분 수정: 미전송 필드 유지. name은 blank 불가·최대 40자. closesAt은 현재 시각 이후.
 빈 요청, 명시적 null, 잘못된 타입/시간은 `400 VALIDATION_ERROR`.
 
+생성·마감 시간 수정 요청의 `closesAt`은 서버가 처리하는 시점보다 미래여야 한다.
+서버는 최소 1분을 강제하지 않고 시간을 임의로 보정하지 않는다. 과거 또는 현재와 같은 시간은
+`400 VALIDATION_ERROR` ProblemDetail로 반환하며, 시간 필드 아래 표시할 안내를 포함한다.
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "마감 시간은 현재 시각 이후여야 합니다.",
+  "instance": "/api/teams/team_15/votes",
+  "code": "VALIDATION_ERROR",
+  "fieldErrors": {
+    "closesAt": "선택한 마감 시간이 지났습니다. 다시 설정해 주세요."
+  }
+}
+```
+
+프론트는 모달을 열 때 현재 시각 + 1분을 분 단위로 올림하여 로컬 `datetime-local`의
+`min`을 설정하고, 제출 시 유효한 날짜인지와 최신 최소 시간을 다시 검증한다.
+유효한 입력은 ISO 8601 UTC로 변환해 전송한다. 클라이언트/서버 시간 검증 실패 시 모달을 유지하고
+입력창 아래 오류를 표시한다. 입력 변경 시 오류를 지우며 필드 오류에 대한 중복 토스트는 생략한다.
+
 ### DELETE `/votes/{voteId}` — 삭제
 
 모든 ACTIVE 팀원. OPEN/CLOSED/CONFIRMED 모두 가능. 참여자·후보·투표·확정 결과 함께 삭제.

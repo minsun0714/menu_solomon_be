@@ -401,6 +401,11 @@ name/title을 보내면 blank 불가·최대 40자이며, 생략/null이면 null
 closesAt은 필수이며 서버 현재 시각보다 이후여야 한다.
 
 상태는 OPEN/CLOSED/CONFIRMED. 스케줄러와 목록·상세·결과 조회에서 마감 정산한다.
+투표 생성·마감 시간 수정에서 `closesAt`이 서버 현재 시각보다 미래가 아니면
+`400 VALIDATION_ERROR`, `detail: "마감 시간은 현재 시각 이후여야 합니다."`,
+`fieldErrors.closesAt: "선택한 마감 시간이 지났습니다. 다시 설정해 주세요."`를 반환한다.
+서버는 최소 1분을 강제하거나 전송받은 시간을 보정하지 않는다.
+
 단독 양수 최다 득표는 AUTO 확정, 동점 또는 무투표는 CLOSED. 후보가 정확히 하나이고 0표이면 생성자가 해당 후보를 수동 확정할 수 있다.
 복수 선택은 후보별 행으로 저장하며 `(session_id, candidate_id, team_member_id)` UNIQUE를 사용한다.
 기존 MySQL 스키마 전환 절차는 상세 명세와 [전환 SQL](migrations/20261004-vote-ui-contract.sql)에 있다.

@@ -78,6 +78,6 @@ public class LunchVoteSession {
         if (name != null && (name.isBlank() || name.length() > 40)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     private static void validateTime(Instant time, Instant now) {
-        if (time == null || !time.isAfter(now)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        if (time == null || !time.isAfter(now)) throw new VoteClosingTimeException();
     }
 }

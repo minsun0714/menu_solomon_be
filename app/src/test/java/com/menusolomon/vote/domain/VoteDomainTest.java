@@ -2,6 +2,7 @@ package com.menusolomon.vote.domain;
 
 import static org.assertj.core.api.Assertions.*;
 import com.menusolomon.common.exception.ErrorCode;
+import com.menusolomon.vote.domain.VoteClosingTimeException;
 import java.time.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,30 @@ class VoteDomainTest {
     @Test void create_nonFutureDeadline_isRejected() {
         assertThatThrownBy(() -> LunchVoteSession.create(1L, 2L, NOW, NOW)).hasFieldOrPropertyWithValue("errorCode", ErrorCode.VALIDATION_ERROR);
     }
+    @ParameterizedTest
+    @ValueSource(longs = {-1, 0})
+    @DisplayName("생성과 수정은 과거 또는 현재와 같은 마감 시간을 식별 가능한 예외로 거절한다")
+    void closingTime_notFuture_isRejectedWithoutChangingSession(long seconds) {
+        Instant closesAt = NOW.plusSeconds(seconds);
+        assertThatThrownBy(() -> LunchVoteSession.create(1L, 2L, closesAt, NOW))
+                .isInstanceOf(VoteClosingTimeException.class);
+        var vote = session();
+        Instant originalDeadline = vote.getClosesAt();
+        assertThatThrownBy(() -> vote.update(null, closesAt, NOW))
+                .isInstanceOf(VoteClosingTimeException.class);
+        assertThat(vote.getClosesAt()).isEqualTo(originalDeadline);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {1, 60, 120})
+    @DisplayName("서버는 생성과 수정에서 미래 마감 시간을 허용하며 최소 1분을 강제하지 않는다")
+    void closingTime_future_isAcceptedForCreateAndUpdate(long seconds) {
+        Instant closesAt = NOW.plusSeconds(seconds);
+        assertThat(LunchVoteSession.create(1L, 2L, closesAt, NOW).getClosesAt()).isEqualTo(closesAt);
+        var vote = session(); vote.update(null, closesAt, NOW);
+        assertThat(vote.getClosesAt()).isEqualTo(closesAt);
+    }
+
     @Test void patch_preservesUnsentFields() {
         var vote = session(); vote.update("점심", null, NOW);
         assertThat(vote.getClosesAt()).isEqualTo(NOW.plusSeconds(10800));
