@@ -18,6 +18,7 @@ import com.menusolomon.vote.repository.*;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -74,6 +75,31 @@ class VoteServiceImplTest {
     }
     @Test void createVote_nonMember_isRejectedWithoutSaving() {
         error(() -> service.createVote(1L,"token",null,DEADLINE),ErrorCode.NOT_TEAM_MEMBER); verifyNoInteractions(sessions);
+    }
+    @Test void joiningMember_isAddedToEveryCurrentOpenVote() {
+        when(sessions.findIdsForTeamByStatus(1L, VoteStatus.OPEN, NOW)).thenReturn(List.of(5L, 6L));
+        when(participants.findAllBySessionIdInAndTeamMemberId(List.of(5L, 6L), 2L)).thenReturn(List.of());
+
+        service.participateInOpenVotes(1L, 2L);
+
+        verify(participants).saveAll(argThat(rows -> StreamSupport.stream(rows.spliterator(), false)
+                .allMatch(row -> row.getTeamMemberId().equals(2L) && row.isParticipating())
+                && StreamSupport.stream(rows.spliterator(), false)
+                        .map(VoteParticipant::getSessionId).toList().equals(List.of(5L, 6L))));
+    }
+    @Test void joiningMember_doesNotDuplicateExistingParticipation() {
+        when(sessions.findIdsForTeamByStatus(1L, VoteStatus.OPEN, NOW)).thenReturn(List.of(5L, 6L));
+        when(participants.findAllBySessionIdInAndTeamMemberId(List.of(5L, 6L), 2L))
+                .thenReturn(List.of(VoteParticipant.create(5L, 2L, true, NOW)));
+
+        service.participateInOpenVotes(1L, 2L);
+
+        verify(participants).saveAll(argThat(rows -> {
+            List<VoteParticipant> saved = StreamSupport.stream(rows.spliterator(), false).toList();
+            return saved.size() == 1
+                    && saved.getFirst().getSessionId().equals(6L)
+                    && saved.getFirst().getTeamMemberId().equals(2L);
+        }));
     }
     @Test
     @DisplayName("팀 투표 정산은 후보 ID 탐색 후 PK 잠금을 획득하고 이미 확정된 투표는 건너뛴다")

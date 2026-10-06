@@ -12,6 +12,7 @@ import com.menusolomon.vote.domain.LunchVoteSession;
 import com.menusolomon.vote.domain.VoteCandidate;
 import com.menusolomon.vote.domain.VoteParticipant;
 import com.menusolomon.vote.domain.VoteRecord;
+import com.menusolomon.vote.domain.VoteStatus;
 import com.menusolomon.vote.domain.VoteTally;
 import com.menusolomon.vote.dto.BallotResponse;
 import com.menusolomon.vote.dto.DecisionResponse;
@@ -165,6 +166,22 @@ public class VoteServiceImpl implements VoteService {
         participants.flush();
         return participants.findProfile(voteId, target.getId()).map(this::participantResponse)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEAM_MEMBER_NOT_FOUND));
+    }
+
+    @Override
+    public void participateInOpenVotes(Long teamId, Long teamMemberId) {
+        Instant now = Instant.now(clock);
+        List<Long> openVoteIds = sessions.findIdsForTeamByStatus(teamId, VoteStatus.OPEN, now);
+        if (openVoteIds.isEmpty()) return;
+
+        var existingSessionIds = participants.findAllBySessionIdInAndTeamMemberId(openVoteIds, teamMemberId).stream()
+            .map(VoteParticipant::getSessionId)
+            .collect(Collectors.toSet());
+        List<VoteParticipant> newParticipants = openVoteIds.stream()
+            .filter(sessionId -> !existingSessionIds.contains(sessionId))
+            .map(sessionId -> VoteParticipant.create(sessionId, teamMemberId, true, now))
+            .toList();
+        if (!newParticipants.isEmpty()) participants.saveAll(newParticipants);
     }
 
     @Override

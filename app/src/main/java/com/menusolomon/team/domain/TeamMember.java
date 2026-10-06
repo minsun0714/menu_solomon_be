@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
+import java.util.UUID;
 import lombok.Getter;
 
 @Entity
@@ -32,6 +33,9 @@ public class TeamMember {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(nullable = false, length = 12)
+    private String nickname;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TeamRole role;
@@ -45,20 +49,29 @@ public class TeamMember {
     protected TeamMember() {
     }
 
-    private TeamMember(Long teamId, Long userId, TeamRole role, Instant joinedAt) {
+    private TeamMember(Long teamId, Long userId, String nickname, TeamRole role, Instant joinedAt) {
         this.teamId = teamId;
         this.userId = userId;
+        this.nickname = normalizeNickname(nickname);
         this.role = role;
         this.joinedAt = joinedAt;
     }
 
     public static TeamMember newAdmin(Long teamId, Long userId, Instant joinedAt) {
-        return new TeamMember(teamId, userId, TeamRole.ADMIN, joinedAt);
+        return newAdmin(teamId, userId, suggestedNickname(), joinedAt);
+    }
+    public static TeamMember newAdmin(Long teamId, Long userId, String nickname, Instant joinedAt) {
+        return new TeamMember(teamId, userId, nickname, TeamRole.ADMIN, joinedAt);
     }
 
     public static TeamMember newMember(Long teamId, Long userId, Instant joinedAt) {
-        return new TeamMember(teamId, userId, TeamRole.MEMBER, joinedAt);
+        return newMember(teamId, userId, suggestedNickname(), joinedAt);
     }
+    public static TeamMember newMember(Long teamId, Long userId, String nickname, Instant joinedAt) {
+        return new TeamMember(teamId, userId, nickname, TeamRole.MEMBER, joinedAt);
+    }
+
+    public void changeNickname(String nickname, Instant now) { this.nickname = normalizeNickname(nickname); }
 
     public boolean isActive() {
         return leftAt == null;
@@ -130,6 +143,14 @@ public class TeamMember {
         if (!isActive()) {
             throw new BusinessException(ErrorCode.NOT_TEAM_MEMBER);
         }
+    }
+
+    private static String suggestedNickname() { return "anon" + UUID.randomUUID().toString().replace("-", "").substring(0, 6); }
+    private static String normalizeNickname(String nickname) {
+        String normalized = nickname == null ? null : nickname.strip();
+        if (normalized == null || normalized.isBlank() || normalized.length() < 2 || normalized.length() > 12
+                || normalized.codePoints().anyMatch(Character::isISOControl)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        return normalized;
     }
 
 }

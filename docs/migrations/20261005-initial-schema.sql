@@ -32,6 +32,7 @@ CREATE TABLE team_members (
     id BIGINT NOT NULL AUTO_INCREMENT,
     team_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
+    nickname VARCHAR(12) NOT NULL,
     role ENUM('ADMIN','MEMBER') NOT NULL,
     joined_at DATETIME(6) NOT NULL,
     left_at DATETIME(6),

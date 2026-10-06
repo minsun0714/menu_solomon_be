@@ -162,17 +162,20 @@ public class TeamServiceImpl implements TeamService {
         var session = userService.getOrCreateSession(rawSessionToken);
         User user = session.user();
         Instant now = Instant.now(clock);
-        return teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId())
-                .map(member -> {
-                    if (!member.isActive() && nickname != null) user.changeNickname(nickname, now);
-                    member.joinIfInactive(now);
-                    return new TeamJoinResult(membership(member, user), false, session.issuedToken());
-                })
-                .orElseGet(() -> {
-                    if (nickname != null) user.changeNickname(nickname, now);
-                    TeamMember member = teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), now));
-                    return new TeamJoinResult(membership(member, user), true, session.issuedToken());
-                });
+
+        TeamMember member = teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId()).orElse(null);
+        boolean firstJoin = member == null;
+        if (firstJoin) {
+            member = nickname == null
+                    ? teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), now))
+                    : teamMemberRepository.save(TeamMember.newMember(team.getId(), user.getId(), nickname, now));
+        } else {
+            boolean wasInactive = !member.isActive();
+            member.joinIfInactive(now);
+            if (wasInactive && nickname != null) member.changeNickname(nickname, now);
+        }
+        voteService.participateInOpenVotes(team.getId(), member.getId());
+        return new TeamJoinResult(membership(member, user), firstJoin, session.issuedToken());
     }
 
     @Override
@@ -277,12 +280,12 @@ public class TeamServiceImpl implements TeamService {
             throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
         }
         return new InvitationMemberResponse("member_" + member.getId(), member.getRole().name(), member.getJoinedAt(),
-                new InvitationUserResponse("user_" + user.getId(), user.getNickname()));
+                new InvitationUserResponse("user_" + user.getId(), member.getNickname()));
     }
 
     private TeamJoinResponse membership(TeamMember member, User user) {
         return new TeamJoinResponse("member_" + member.getId(), "team_" + member.getTeamId(),
-                "user_" + member.getUserId(), user.getNickname(), member.getRole().name(), member.getJoinedAt());
+                "user_" + member.getUserId(), member.getNickname(), member.getRole().name(), member.getJoinedAt());
     }
 
     private String newInviteToken() {
