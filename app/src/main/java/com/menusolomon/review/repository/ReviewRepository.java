@@ -17,10 +17,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query("""
             select new com.menusolomon.review.repository.ReviewRow(
                 review.id, review.teamMemberId, review.rating, review.content,
-                author.nickname, review.createdAt, review.updatedAt)
+                member.nickname, review.createdAt, review.updatedAt)
             from Review review
             join TeamMember member on member.id = review.teamMemberId
-            join User author on author.id = member.userId
             where review.teamRestaurantId = :teamRestaurantId
             order by review.updatedAt desc, review.id desc
             """)

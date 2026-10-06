@@ -13,10 +13,10 @@ import org.springframework.data.repository.query.Param;
 public interface ConfirmedMenuRepository extends JpaRepository<ConfirmedMenu, Long> {
     Optional<ConfirmedMenu> findBySessionId(Long sessionId);
     @Query("""
-        select new com.menusolomon.vote.repository.VoteHistoryRow(d.id, d.sessionId, d.confirmedAt, d.confirmationType, u.nickname,
+        select new com.menusolomon.vote.repository.VoteHistoryRow(d.id, d.sessionId, d.confirmedAt, d.confirmationType, m.nickname,
             r.id, r.kakaoPlaceId, r.name, r.address, r.latitude, r.longitude, r.category, r.kakaoPlaceUrl)
         from ConfirmedMenu d join LunchVoteSession s on s.id=d.sessionId join Restaurant r on r.id=d.restaurantId
-        left join TeamMember m on m.id=d.confirmedByTeamMemberId left join User u on u.id=m.userId
+        left join TeamMember m on m.id=d.confirmedByTeamMemberId
         where s.teamId=:teamId and s.status=com.menusolomon.vote.domain.VoteStatus.CONFIRMED
             and d.confirmedAt >= :from and d.confirmedAt < :until order by d.confirmedAt desc, d.id desc
         """)

@@ -256,6 +256,7 @@ class TeamServiceImplTest {
         assertThat(result.membership().role()).isEqualTo("MEMBER");
         assertThat(result.membership().joinedAt()).isEqualTo(NOW.plusSeconds(60));
         verify(teamMemberRepository).save(any(TeamMember.class));
+        verify(voteService).participateInOpenVotes(1L, 2L);
     }
 
     @Test

@@ -53,7 +53,7 @@ public class ReviewServiceImpl implements ReviewService {
             review = existing.get();
             review.update(rating, content, now);
         }
-        return new ReviewSaveResult(ReviewResponse.from(review, user.getNickname()), created);
+        return new ReviewSaveResult(ReviewResponse.from(review, member.getNickname()), created);
     }
 
     @Override

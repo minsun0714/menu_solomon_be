@@ -15,21 +15,19 @@ public interface TeamRestaurantRepository extends JpaRepository<TeamRestaurant, 
     String ROW_QUERY = """
             select new com.menusolomon.restaurant.repository.TeamRestaurantRow(
                 tr.id, r.id, r.kakaoPlaceId, r.name, r.address, r.latitude, r.longitude,
-                r.category, r.kakaoPlaceUrl, u.nickname, tr.createdAt,
+                r.category, r.kakaoPlaceUrl, tm.nickname, tr.createdAt,
                 (select avg(review.rating) from Review review where review.teamRestaurantId = tr.id),
                 (select count(review.id) from Review review where review.teamRestaurantId = tr.id),
-                latestUser.nickname, latest.rating, latest.content, latest.updatedAt)
+                latestMember.nickname, latest.rating, latest.content, latest.updatedAt)
             from TeamRestaurant tr
             join Restaurant r on r.id = tr.restaurantId
             join TeamMember tm on tm.id = tr.registeredByTeamMemberId
-            join User u on u.id = tm.userId
             left join Review latest on latest.teamRestaurantId = tr.id
                 and not exists (select newer.id from Review newer
                     where newer.teamRestaurantId = tr.id and
                     (newer.updatedAt > latest.updatedAt or
                      (newer.updatedAt = latest.updatedAt and newer.id > latest.id)))
             left join TeamMember latestMember on latestMember.id = latest.teamMemberId
-            left join User latestUser on latestUser.id = latestMember.userId
             """;
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

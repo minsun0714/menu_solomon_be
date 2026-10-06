@@ -11,9 +11,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface VoteParticipantRepository extends JpaRepository<VoteParticipant, Long> {
     Optional<VoteParticipant> findBySessionIdAndTeamMemberId(Long sessionId, Long memberId);
+    List<VoteParticipant> findAllBySessionIdInAndTeamMemberId(List<Long> sessionIds, Long memberId);
     String PROFILE = """
-        select new com.menusolomon.vote.repository.VoteParticipantRow(p.id, p.sessionId, p.teamMemberId, u.nickname, p.participating)
-        from VoteParticipant p join TeamMember m on m.id=p.teamMemberId join User u on u.id=m.userId
+        select new com.menusolomon.vote.repository.VoteParticipantRow(p.id, p.sessionId, p.teamMemberId, m.nickname, p.participating)
+        from VoteParticipant p join TeamMember m on m.id=p.teamMemberId
         """;
     @Query(PROFILE + "where p.sessionId=:id order by p.id")
     List<VoteParticipantRow> findProfiles(@Param("id") Long id);

@@ -27,6 +27,7 @@ public interface VoteService {
     VoteSessionResponse restart(Long teamId, Long voteId, String token);
     List<VoteParticipantResponse> getParticipants(Long teamId, Long voteId, String token);
     VoteParticipantResponse updateParticipation(Long teamId, Long voteId, String token, Long targetMemberId, boolean participating);
+    void participateInOpenVotes(Long teamId, Long teamMemberId);
     List<VoteCandidateResponse> getCandidates(Long teamId, Long voteId, String token);
     VoteCandidateResponse addCandidate(Long teamId, Long voteId, String token, VoteCandidateCreateRequest request);
     void deleteCandidate(Long teamId, Long voteId, String token, Long candidateId);
